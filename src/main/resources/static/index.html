@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI TestOps 文档解析 Demo</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="shell">
+    <section class="hero" aria-labelledby="page-title">
+      <div>
+        <p class="eyebrow">AI TestOps Demo</p>
+        <h1 id="page-title">AI 测试设计工作台</h1>
+        <p class="hero-copy">
+          输入需求文本或上传需求文档，创建 Document 记录后调用 Apache Tika 解析，
+          再调用 AI 生成可校验、可评审、可导出的测试用例。
+        </p>
+      </div>
+      <div class="hero-card" aria-label="当前流程">
+        <span>Text / File</span>
+        <strong>Document</strong>
+        <span>AI Generate</span>
+        <strong>Review</strong>
+      </div>
+    </section>
+
+    <section class="grid">
+      <article class="panel">
+        <div class="panel-heading">
+          <p class="section-label">01</p>
+          <h2>文本建档</h2>
+        </div>
+        <form id="textForm" class="stack">
+          <label>
+            标题
+            <input id="textTitle" name="title" type="text" value="订单需求" required maxlength="255">
+          </label>
+          <label>
+            需求内容
+            <textarea id="textContent" name="content" rows="7" required>用户可以提交订单。
+
+库存不足时提交失败。</textarea>
+          </label>
+          <button type="submit">创建文本文档</button>
+        </form>
+      </article>
+
+      <article class="panel">
+        <div class="panel-heading">
+          <p class="section-label">02</p>
+          <h2>文件上传</h2>
+        </div>
+        <form id="uploadForm" class="stack">
+          <label>
+            文档标题
+            <input id="uploadTitle" name="title" type="text" placeholder="可选，默认使用文件名">
+          </label>
+          <label>
+            需求文件
+            <input id="uploadFile" name="file" type="file" accept=".md,.txt,.ppt,.pptx,.xls,.xlsx,.pdf,.doc,.docx" required>
+          </label>
+          <p class="hint">支持 md、txt、ppt、pptx、xls、xlsx、pdf、doc、docx，默认最大 50MB。</p>
+          <button type="submit">上传并创建文档</button>
+        </form>
+      </article>
+
+      <article class="panel control-panel">
+        <div class="panel-heading">
+          <p class="section-label">03</p>
+          <h2>解析与查询</h2>
+        </div>
+        <div class="stack">
+          <label>
+            Document ID
+            <input id="documentId" type="text" placeholder="DOC_20260502_123456">
+          </label>
+          <div class="button-row">
+            <button id="parseBtn" type="button">解析文档</button>
+            <button id="detailBtn" type="button" class="secondary">查询详情</button>
+            <button id="chunksBtn" type="button" class="secondary">查询 Chunks</button>
+          </div>
+        </div>
+      </article>
+
+      <article class="panel control-panel">
+        <div class="panel-heading">
+          <p class="section-label">04</p>
+          <h2>AI 生成与评审</h2>
+        </div>
+        <div class="stack">
+          <label>
+            Generation ID
+            <input id="generationId" type="text" placeholder="GEN_20260502_123456">
+          </label>
+          <label>
+            Draft Case ID
+            <input id="draftCaseId" type="text" placeholder="DRAFT_20260502_123456">
+          </label>
+          <label>
+            Test Case ID / Draft ID
+            <input id="caseLookupId" type="text" placeholder="用于查询评审记录">
+          </label>
+          <label>
+            草稿标题编辑
+            <input id="draftTitleEdit" type="text" placeholder="只编辑标题，更多字段可用接口文档调试">
+          </label>
+          <p class="hint">默认使用 MOCK 模式；配置真实 AI_API_KEY 后会调用 OpenAI-compatible API。</p>
+          <div class="button-row">
+            <button id="extractBtn" type="button">提取结构化需求</button>
+            <button id="generateCasesBtn" type="button">生成测试用例草稿</button>
+            <button id="generationBtn" type="button" class="secondary">查询生成记录</button>
+            <button id="validationBtn" type="button" class="secondary">查询校验结果</button>
+            <button id="draftsBtn" type="button" class="secondary">查询草稿</button>
+            <button id="editDraftBtn" type="button" class="secondary">保存标题编辑</button>
+            <button id="approveBtn" type="button" class="secondary">确认草稿</button>
+            <button id="rejectBtn" type="button" class="secondary">驳回草稿</button>
+            <button id="casesBtn" type="button" class="secondary">查询正式用例</button>
+            <button id="reviewsBtn" type="button" class="secondary">查询评审记录</button>
+            <button id="exportJsonBtn" type="button" class="secondary">导出 JSON</button>
+            <button id="exportExcelBtn" type="button" class="secondary">导出 Excel</button>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section class="workspace">
+      <article class="result-card">
+        <div class="panel-heading">
+          <p class="section-label">Result</p>
+          <h2>操作结果</h2>
+        </div>
+        <pre id="resultOutput" aria-live="polite">等待操作...</pre>
+      </article>
+
+      <article class="result-card">
+        <div class="panel-heading">
+          <p class="section-label">Chunks</p>
+          <h2>分块预览</h2>
+        </div>
+        <div id="chunkList" class="chunk-list" aria-live="polite">
+          <p class="empty">暂无 chunk 数据。</p>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

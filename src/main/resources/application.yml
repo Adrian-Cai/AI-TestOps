@@ -1,0 +1,67 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: ai-testops
+  datasource:
+    driver-class-name: org.mariadb.jdbc.Driver
+    url: ${DB_URL:jdbc:mariadb://localhost:3306/ai_testops?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
+  servlet:
+    multipart:
+      max-file-size: ${UPLOAD_MAX_FILE_SIZE:50MB}
+      max-request-size: ${UPLOAD_MAX_REQUEST_SIZE:60MB}
+  jackson:
+    time-zone: Asia/Shanghai
+    date-format: yyyy-MM-dd HH:mm:ss
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    banner: false
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+  group-configs:
+    - group: default
+      paths-to-match: /api/**
+      packages-to-scan: com.example.aitestops
+
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
+
+ai-testops:
+  file:
+    upload-dir: ${AI_TESTOPS_UPLOAD_DIR:./data/uploads}
+    max-size: ${AI_TESTOPS_FILE_MAX_SIZE:50MB}
+    allowed-extensions:
+      - md
+      - txt
+      - ppt
+      - pptx
+      - xls
+      - xlsx
+      - pdf
+      - doc
+      - docx
+  parser:
+    chunk-target-size: ${AI_TESTOPS_CHUNK_TARGET_SIZE:2000}
+    chunk-max-size: ${AI_TESTOPS_CHUNK_MAX_SIZE:3000}
+  ai:
+    provider: ${AI_PROVIDER:MOCK}
+    model-code: ${AI_MODEL_CODE:default}
+    model-name: ${AI_MODEL_NAME:mock-requirement-extractor}
+    api-base: ${AI_API_BASE:https://api.openai.com}
+    api-key: ${AI_API_KEY:}
+    temperature: ${AI_TEMPERATURE:0.2}
+    max-tokens: ${AI_MAX_TOKENS:4096}

@@ -1,0 +1,31 @@
+spring:
+  datasource:
+    driver-class-name: org.h2.Driver
+    url: jdbc:h2:mem:ai_testops;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  sql:
+    init:
+      mode: always
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 12MB
+
+ai-testops:
+  file:
+    upload-dir: ./target/test-uploads
+    max-size: 10MB
+    allowed-extensions:
+      - md
+      - txt
+      - ppt
+      - pptx
+      - xls
+      - xlsx
+      - pdf
+      - doc
+      - docx
+  parser:
+    chunk-target-size: 40
+    chunk-max-size: 60
