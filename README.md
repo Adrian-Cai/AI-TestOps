@@ -1,22 +1,34 @@
 # AI TestOps Demo
 
-AI 测试设计 Demo 后端与静态前端页面，覆盖文档接入解析、AI 需求抽取、测试用例草稿生成、校验、人工评审确认和导出。
+[English](README.md) | [中文](README_CN.md)
 
-## 快速入口
+---
 
-- 前端页面：`http://localhost:8080/`
-- Knife4j 接口文档：`http://localhost:8080/doc.html`
-- 启动运行说明：[docs/启动运行说明.md](docs/启动运行说明.md)
+AI TestOps Demo backend and static frontend page, covering document ingestion and parsing, AI requirement extraction, test case draft generation, validation, manual review and confirmation, and export.
 
-## 启动
+## Features
+
+- **Document Parsing**: Support for multiple document formats ingestion and parsing
+- **AI Requirement Extraction**: Intelligent extraction of key information from requirement documents
+- **Test Case Generation**: Automatic generation of test case drafts
+- **Validation & Review**: Automatic validation and manual review confirmation
+- **Export Function**: Support for test case export
+
+## Quick Start
+
+- Frontend: `http://localhost:8080/`
+- Knife4j API Docs: `http://localhost:8080/doc.html`
+- Run Instructions: [docs/启动运行说明.md](docs/启动运行说明.md)
+
+## Run
 
 ```powershell
 .\mvnw.cmd spring-boot:run
 ```
 
-数据库和大模型配置统一写在项目根目录 `.env` 中。远程数据库已建库建表后，不需要项目内 SQL 文件参与启动。详细说明见 [docs/启动运行说明.md](docs/启动运行说明.md)。
+Database and LLM configurations are stored in the `.env` file in the project root. Once the remote database is set up, no SQL files are needed for startup. See [docs/启动运行说明.md](docs/启动运行说明.md) for details.
 
-## 验证
+## Verify
 
 ```powershell
 .\mvnw.cmd test
