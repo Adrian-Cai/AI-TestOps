@@ -76,7 +76,8 @@ CREATE TABLE ai_testops_prompt_template (
   created_at DATETIME NOT NULL,
   updated_at DATETIME NOT NULL,
   PRIMARY KEY (id),
-  UNIQUE KEY uk_template_code (template_code)
+  UNIQUE KEY uk_template_code_version (template_code, version),
+  KEY idx_prompt_enabled (template_code, enabled)
 );
 
 CREATE TABLE ai_testops_generation_record (
@@ -85,6 +86,7 @@ CREATE TABLE ai_testops_generation_record (
   document_id VARCHAR(64) NOT NULL,
   requirement_extract_id VARCHAR(64) NULL,
   prompt_template_code VARCHAR(64) NOT NULL,
+  prompt_template_version VARCHAR(32) NULL,
   model_code VARCHAR(64) NOT NULL,
   model_name VARCHAR(128) NULL,
   generation_type VARCHAR(64) NOT NULL,

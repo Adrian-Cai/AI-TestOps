@@ -67,7 +67,8 @@ CREATE TABLE IF NOT EXISTS ai_testops_prompt_template (
   created_at DATETIME NOT NULL,
   updated_at DATETIME NOT NULL,
   PRIMARY KEY (id),
-  UNIQUE KEY uk_template_code (template_code)
+  UNIQUE KEY uk_template_code_version (template_code, version),
+  KEY idx_prompt_enabled (template_code, enabled)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ai_testops_generation_record (
@@ -76,6 +77,7 @@ CREATE TABLE IF NOT EXISTS ai_testops_generation_record (
   document_id VARCHAR(64) NOT NULL,
   requirement_extract_id VARCHAR(64) NULL,
   prompt_template_code VARCHAR(64) NOT NULL,
+  prompt_template_version VARCHAR(32) NULL,
   model_code VARCHAR(64) NOT NULL,
   model_name VARCHAR(128) NULL,
   generation_type VARCHAR(64) NOT NULL,
@@ -269,12 +271,15 @@ ALTER TABLE ai_testops_prompt_template ADD COLUMN IF NOT EXISTS json_schema LONG
 ALTER TABLE ai_testops_prompt_template ADD COLUMN IF NOT EXISTS enabled TINYINT NULL DEFAULT 1;
 ALTER TABLE ai_testops_prompt_template ADD COLUMN IF NOT EXISTS created_at DATETIME NULL;
 ALTER TABLE ai_testops_prompt_template ADD COLUMN IF NOT EXISTS updated_at DATETIME NULL;
-ALTER TABLE ai_testops_prompt_template ADD UNIQUE INDEX IF NOT EXISTS uk_template_code (template_code);
+ALTER TABLE ai_testops_prompt_template DROP INDEX IF EXISTS uk_template_code;
+ALTER TABLE ai_testops_prompt_template ADD UNIQUE INDEX IF NOT EXISTS uk_template_code_version (template_code, version);
+ALTER TABLE ai_testops_prompt_template ADD INDEX IF NOT EXISTS idx_prompt_enabled (template_code, enabled);
 
 ALTER TABLE ai_testops_generation_record ADD COLUMN IF NOT EXISTS generation_id VARCHAR(64) NULL;
 ALTER TABLE ai_testops_generation_record ADD COLUMN IF NOT EXISTS document_id VARCHAR(64) NULL;
 ALTER TABLE ai_testops_generation_record ADD COLUMN IF NOT EXISTS requirement_extract_id VARCHAR(64) NULL;
 ALTER TABLE ai_testops_generation_record ADD COLUMN IF NOT EXISTS prompt_template_code VARCHAR(64) NULL;
+ALTER TABLE ai_testops_generation_record ADD COLUMN IF NOT EXISTS prompt_template_version VARCHAR(32) NULL;
 ALTER TABLE ai_testops_generation_record ADD COLUMN IF NOT EXISTS model_code VARCHAR(64) NULL;
 ALTER TABLE ai_testops_generation_record ADD COLUMN IF NOT EXISTS model_name VARCHAR(128) NULL;
 ALTER TABLE ai_testops_generation_record ADD COLUMN IF NOT EXISTS generation_type VARCHAR(64) NULL;
