@@ -271,7 +271,7 @@ ALTER TABLE ai_testops_prompt_template ADD COLUMN IF NOT EXISTS json_schema LONG
 ALTER TABLE ai_testops_prompt_template ADD COLUMN IF NOT EXISTS enabled TINYINT NULL DEFAULT 1;
 ALTER TABLE ai_testops_prompt_template ADD COLUMN IF NOT EXISTS created_at DATETIME NULL;
 ALTER TABLE ai_testops_prompt_template ADD COLUMN IF NOT EXISTS updated_at DATETIME NULL;
-ALTER TABLE ai_testops_prompt_template DROP INDEX IF EXISTS uk_template_code;
+DROP INDEX IF EXISTS uk_template_code ON ai_testops_prompt_template;
 ALTER TABLE ai_testops_prompt_template ADD UNIQUE INDEX IF NOT EXISTS uk_template_code_version (template_code, version);
 ALTER TABLE ai_testops_prompt_template ADD INDEX IF NOT EXISTS idx_prompt_enabled (template_code, enabled);
 

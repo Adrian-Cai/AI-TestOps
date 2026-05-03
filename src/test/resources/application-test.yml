@@ -29,3 +29,10 @@ ai-testops:
   parser:
     chunk-target-size: 40
     chunk-max-size: 60
+  ai:
+    provider: MOCK
+    model-code: default
+    model-name: mock-requirement-extractor
+    api-base: https://api.openai.com
+    api-key:
+    json-mode: false
