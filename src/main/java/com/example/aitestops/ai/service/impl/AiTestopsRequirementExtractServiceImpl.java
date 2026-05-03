@@ -21,6 +21,7 @@ import com.example.aitestops.common.enums.GenerationTypeEnum;
 import com.example.aitestops.common.enums.ParseStatusEnum;
 import com.example.aitestops.common.exception.BusinessException;
 import com.example.aitestops.common.exception.ErrorCode;
+import com.example.aitestops.common.util.AiJsonExtractor;
 import com.example.aitestops.common.util.IdGenerator;
 import com.example.aitestops.common.util.JsonUtil;
 import com.example.aitestops.document.entity.AiTestopsDocument;
@@ -129,6 +130,7 @@ public class AiTestopsRequirementExtractServiceImpl
         record.setGenerationId(generationId);
         record.setDocumentId(documentId);
         record.setPromptTemplateCode(template.getTemplateCode());
+        record.setPromptTemplateVersion(template.getVersion());
         record.setModelCode(resolveModelCode(request.getModelCode()));
         record.setModelName(aiModelProperties.getModelName());
         record.setGenerationType(GenerationTypeEnum.REQUIREMENT_EXTRACT.name());
@@ -146,6 +148,7 @@ public class AiTestopsRequirementExtractServiceImpl
         snapshot.put("documentId", document.getDocumentId());
         snapshot.put("title", document.getTitle());
         snapshot.put("promptTemplateCode", template.getTemplateCode());
+        snapshot.put("promptTemplateVersion", template.getVersion());
         snapshot.put("modelCode", resolveModelCode(request.getModelCode()));
         snapshot.put("chunks", chunks.stream().map(chunk -> Map.of(
                 "chunk_id", chunk.getChunkId(),
@@ -169,7 +172,7 @@ public class AiTestopsRequirementExtractServiceImpl
 
     private JsonNode parseAndValidateRequirementJson(String content, String generationId) {
         try {
-            JsonNode root = objectMapper.readTree(content);
+            JsonNode root = objectMapper.readTree(AiJsonExtractor.extractJsonObject(content));
             validateArrayField(root, "requirements", generationId);
             validateArrayField(root, "business_rules", generationId);
             validateArrayField(root, "api_list", generationId);

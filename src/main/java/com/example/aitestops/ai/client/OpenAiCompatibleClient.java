@@ -17,6 +17,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -43,15 +44,17 @@ public class OpenAiCompatibleClient implements AiClient {
         validateConfig();
 
         String modelName = StringUtils.hasText(request.getModelName()) ? request.getModelName() : aiModelProperties.getModelName();
-        Map<String, Object> body = Map.of(
-                "model", modelName,
-                "messages", List.of(
-                        Map.of("role", "system", "content", request.getSystemPrompt()),
-                        Map.of("role", "user", "content", request.getUserPrompt())
-                ),
-                "temperature", aiModelProperties.getTemperature(),
-                "max_tokens", aiModelProperties.getMaxTokens()
-        );
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("model", modelName);
+        body.put("messages", List.of(
+                Map.of("role", "system", "content", request.getSystemPrompt()),
+                Map.of("role", "user", "content", request.getUserPrompt())
+        ));
+        body.put("temperature", aiModelProperties.getTemperature());
+        body.put("max_tokens", aiModelProperties.getMaxTokens());
+        if (Boolean.TRUE.equals(aiModelProperties.getJsonMode())) {
+            body.put("response_format", Map.of("type", "json_object"));
+        }
 
         String endpoint = aiModelProperties.getApiBase().replaceAll("/+$", "") + "/v1/chat/completions";
         log.info("AI 请求开始: provider={}, modelCode={}, modelName={}, endpoint={}",

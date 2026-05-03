@@ -123,6 +123,25 @@ class AiTestopsTestCaseDraftServiceIntegrationTest {
                 .contains("REJECT");
     }
 
+    @Test
+    void approveDraftsShouldDisambiguateDuplicateAiCaseIdsForFormalCases() {
+        TestCaseGenerateVO firstGenerated = generateOneDraft();
+        String firstDraftCaseId = firstGenerated.getDrafts().get(0).getDraftCaseId();
+        TestCaseDraftReviewRequest approveRequest = new TestCaseDraftReviewRequest();
+        approveRequest.setReason("duplicate case id compatibility");
+        approveRequest.setReviewer("qa");
+        TestCaseVO firstApproved = testCaseDraftService.approveDraft(firstDraftCaseId, approveRequest);
+
+        TestCaseGenerateVO secondGenerated = generateOneDraft();
+        String secondDraftCaseId = secondGenerated.getDrafts().get(0).getDraftCaseId();
+        TestCaseVO secondApproved = testCaseDraftService.approveDraft(secondDraftCaseId, approveRequest);
+
+        String originalCaseId = secondGenerated.getDrafts().get(0).getCaseId();
+        assertThat(firstApproved.getTestCaseId()).isNotEqualTo(secondApproved.getTestCaseId());
+        assertThat(secondApproved.getCaseId()).startsWith(originalCaseId + "_");
+        assertThat(secondApproved.getCaseId()).hasSizeLessThanOrEqualTo(64);
+    }
+
     private TestCaseGenerateVO generateOneDraft() {
         TextDocumentCreateRequest createRequest = new TextDocumentCreateRequest();
         createRequest.setTitle("订单需求");

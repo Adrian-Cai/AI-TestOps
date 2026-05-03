@@ -24,6 +24,7 @@ import com.example.aitestops.common.enums.ValidationStatusEnum;
 import com.example.aitestops.common.enums.ValidationTypeEnum;
 import com.example.aitestops.common.exception.BusinessException;
 import com.example.aitestops.common.exception.ErrorCode;
+import com.example.aitestops.common.util.AiJsonExtractor;
 import com.example.aitestops.common.util.IdGenerator;
 import com.example.aitestops.common.util.JsonUtil;
 import com.example.aitestops.document.entity.AiTestopsDocument;
@@ -290,6 +291,7 @@ public class AiTestopsTestCaseDraftServiceImpl
         record.setDocumentId(document.getDocumentId());
         record.setRequirementExtractId(extract == null ? null : extract.getRequirementExtractId());
         record.setPromptTemplateCode(template.getTemplateCode());
+        record.setPromptTemplateVersion(template.getVersion());
         record.setModelCode(resolveModelCode(request.getModelCode()));
         record.setModelName(aiModelProperties.getModelName());
         record.setGenerationType(GenerationTypeEnum.TEST_CASE_GENERATE.name());
@@ -308,6 +310,7 @@ public class AiTestopsTestCaseDraftServiceImpl
         snapshot.put("documentId", document.getDocumentId());
         snapshot.put("requirementExtractId", extract == null ? null : extract.getRequirementExtractId());
         snapshot.put("promptTemplateCode", template.getTemplateCode());
+        snapshot.put("promptTemplateVersion", template.getVersion());
         snapshot.put("modelCode", resolveModelCode(request.getModelCode()));
         snapshot.put("requirementsJson", extract == null ? null : extract.getRequirementsJson());
         snapshot.put("chunks", chunks.stream().map(chunk -> Map.of(
@@ -338,7 +341,7 @@ public class AiTestopsTestCaseDraftServiceImpl
 
     private JsonNode parseJsonOrSaveSchemaFailure(String generationId, String content) {
         try {
-            JsonNode root = objectMapper.readTree(content);
+            JsonNode root = objectMapper.readTree(AiJsonExtractor.extractJsonObject(content));
             JsonNode testCases = root.get("test_cases");
             if (testCases == null || !testCases.isArray() || testCases.isEmpty()) {
                 saveValidation(generationId, ValidationTypeEnum.SCHEMA, ValidationStatusEnum.FAILED,
@@ -596,7 +599,7 @@ public class AiTestopsTestCaseDraftServiceImpl
         AiTestopsTestCase testCase = new AiTestopsTestCase();
         testCase.setTestCaseId(IdGenerator.testCaseId());
         testCase.setSourceDraftCaseId(draft.getDraftCaseId());
-        testCase.setCaseId(draft.getCaseId());
+        testCase.setCaseId(resolveFormalCaseId(draft));
         testCase.setGenerationId(draft.getGenerationId());
         testCase.setDocumentId(draft.getDocumentId());
         testCase.setRequirementExtractId(draft.getRequirementExtractId());
@@ -612,6 +615,36 @@ public class AiTestopsTestCaseDraftServiceImpl
         testCase.setCreatedAt(now);
         testCase.setUpdatedAt(now);
         return testCase;
+    }
+
+    private String resolveFormalCaseId(AiTestopsTestCaseDraft draft) {
+        String caseId = draft.getCaseId();
+        if (!StringUtils.hasText(caseId) || !formalCaseIdExists(caseId)) {
+            return caseId;
+        }
+
+        String suffix = draft.getDraftCaseId();
+        int lastSeparator = suffix == null ? -1 : suffix.lastIndexOf('_');
+        if (lastSeparator >= 0 && lastSeparator + 1 < suffix.length()) {
+            suffix = suffix.substring(lastSeparator + 1);
+        }
+        if (!StringUtils.hasText(suffix)) {
+            suffix = String.valueOf(draft.getId());
+        }
+
+        String base = truncate(caseId, Math.max(1, 64 - suffix.length() - 1));
+        String candidate = base + "_" + suffix;
+        int sequence = 1;
+        while (formalCaseIdExists(candidate)) {
+            String numberedSuffix = suffix + "_" + sequence++;
+            candidate = truncate(caseId, Math.max(1, 64 - numberedSuffix.length() - 1)) + "_" + numberedSuffix;
+        }
+        return candidate;
+    }
+
+    private boolean formalCaseIdExists(String caseId) {
+        return testCaseService.count(new LambdaQueryWrapper<AiTestopsTestCase>()
+                .eq(AiTestopsTestCase::getCaseId, caseId)) > 0;
     }
 
     private void saveRequirementMappings(AiTestopsTestCaseDraft draft, AiTestopsTestCase testCase, LocalDateTime now) {

@@ -65,3 +65,4 @@ ai-testops:
     api-key: ${AI_API_KEY:}
     temperature: ${AI_TEMPERATURE:0.2}
     max-tokens: ${AI_MAX_TOKENS:4096}
+    json-mode: ${AI_JSON_MODE:false}

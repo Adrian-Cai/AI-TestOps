@@ -32,7 +32,9 @@ import type { MenuProps, UploadProps } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import {
   ApiOutlined,
+  BarChartOutlined,
   CheckCircleOutlined,
+  ClockCircleOutlined,
   CloudUploadOutlined,
   CodeOutlined,
   DatabaseOutlined,
@@ -116,6 +118,10 @@ function App() {
 
   const documentId = documentInfo?.documentId;
   const generationId = generationResult?.generationId || requirementExtract?.generationId || generationRecord?.generationId;
+  const passedValidations = validations.filter((item) => item.status === "PASSED").length;
+  const failedValidations = validations.filter((item) => item.status === "FAILED").length;
+  const approvedDrafts = drafts.filter((item) => item.reviewStatus === "APPROVED").length;
+  const pendingDrafts = drafts.filter((item) => !item.reviewStatus || item.reviewStatus === "PENDING").length;
 
   const addLog = (action: string, status: OperationLog["status"], detail?: string) => {
     setLogSeed((seed) => {
@@ -343,6 +349,7 @@ function App() {
     accept: allowedExtensions.map((item) => `.${item}`).join(","),
     multiple: false,
     maxCount: 1,
+    showUploadList: false,
     beforeUpload: (file) => {
       const validation = validateFile(file);
       if (validation) {
@@ -356,6 +363,70 @@ function App() {
       setSelectedFile(null);
     }
   };
+
+  const chunkColumns: ColumnsType<DocumentChunkVO> = [
+    { title: "Chunk ID", dataIndex: "chunkId", width: 180, fixed: "left" },
+    { title: "序号", dataIndex: "chunkIndex", width: 80, sorter: (a, b) => a.chunkIndex - b.chunkIndex },
+    { title: "所属章节", dataIndex: "sectionTitle", width: 160, render: (value) => value || "默认章节" },
+    { title: "字数", width: 90, render: (_, record) => record.chunkText?.length || 0 },
+    { title: "Token 估算", dataIndex: "tokenCount", width: 120, render: (value) => value || 0 },
+    {
+      title: "内容预览",
+      dataIndex: "chunkText",
+      render: (value: string) => <Text ellipsis>{value || "暂无内容"}</Text>
+    },
+    {
+      title: "操作",
+      width: 90,
+      render: (_, record) => (
+        <Button size="small" onClick={() => setActiveChunk(record)}>
+          查看
+        </Button>
+      )
+    }
+  ];
+
+  const draftColumns: ColumnsType<TestCaseDraftVO> = [
+    {
+      title: "状态",
+      dataIndex: "reviewStatus",
+      width: 110,
+      render: (value) => <StatusTag value={value} />
+    },
+    { title: "用例标题", dataIndex: "title", width: 260, render: (value) => <Text strong>{value}</Text> },
+    { title: "优先级", dataIndex: "priority", width: 90, render: (value) => <Tag color="blue">{value || "-"}</Tag> },
+    { title: "类型", dataIndex: "caseType", width: 130 },
+    { title: "风险等级", dataIndex: "riskLevel", width: 110, render: (value) => <RiskTag value={value} /> },
+    { title: "关联需求", dataIndex: "requirementRefsJson", width: 180, render: (value) => renderJsonTags(value) },
+    {
+      title: "操作",
+      width: 230,
+      fixed: "right",
+      render: (_, record) => (
+        <Space wrap>
+          <Button size="small" icon={<EditOutlined />} onClick={() => openDraftEditor(record)}>
+            编辑
+          </Button>
+          <Button size="small" type="primary" onClick={() => approveDraft(record)}>
+            确认
+          </Button>
+          <Button size="small" danger onClick={() => rejectDraft(record)}>
+            驳回
+          </Button>
+        </Space>
+      )
+    }
+  ];
+
+  const caseColumns: ColumnsType<TestCaseVO> = [
+    { title: "Case ID", dataIndex: "caseId", width: 130 },
+    { title: "标题", dataIndex: "title", width: 280, render: (value) => <Text strong>{value}</Text> },
+    { title: "优先级", dataIndex: "priority", width: 90, render: (value) => <Tag color="blue">{value || "-"}</Tag> },
+    { title: "类型", dataIndex: "caseType", width: 130 },
+    { title: "风险", dataIndex: "riskLevel", width: 100, render: (value) => <RiskTag value={value} /> },
+    { title: "状态", dataIndex: "status", width: 100, render: (value) => <Tag color="green">{value || "ACTIVE"}</Tag> },
+    { title: "关联需求", dataIndex: "requirementRefsJson", render: (value) => renderJsonTags(value) }
+  ];
 
   const steps = useMemo(
     () =>
@@ -375,17 +446,22 @@ function App() {
       <Header className="app-header">
         <div>
           <Title level={1}>AI 测试设计工作台</Title>
-          <Text type="secondary">文档解析、AI 生成、校验、人工确认和质量闭环的一体化流程</Text>
+          <Text type="secondary">后台管理系统 + AI 工作台 + 数据卡片</Text>
         </div>
-        <Space size="middle" wrap>
-          <Tag color="blue">模型 default</Tag>
-          <Tag icon={<FileDoneOutlined />} color={documentId ? "green" : "default"}>
-            {documentId || "未建档"}
-          </Tag>
-          <Tag icon={<ApiOutlined />} color={generationId ? "geekblue" : "default"}>
-            {generationId || "未生成"}
-          </Tag>
-        </Space>
+        <div className="header-meta">
+          <div className="header-meta-item">
+            <Text type="secondary">当前项目</Text>
+            <Text strong>{documentInfo?.title || "Demo 项目"}</Text>
+          </div>
+          <div className="header-meta-item">
+            <Text type="secondary">当前模型</Text>
+            <Tag color="blue">default</Tag>
+          </div>
+          <div className="header-meta-item">
+            <Text type="secondary">流程状态</Text>
+            <StatusTag value={cases.length ? "ACTIVE" : documentInfo?.parseStatus} />
+          </div>
+        </div>
       </Header>
 
       <Layout className="app-body">
@@ -409,6 +485,7 @@ function App() {
                   responsive
                 />
               </Card>
+              {renderMetricStrip()}
 
               <Spin spinning={Boolean(busy)} tip={loadingText(busy)}>
                 {currentStep === "input" && renderInputStep()}
@@ -499,7 +576,7 @@ function App() {
 
   function renderInputStep() {
     return (
-      <Card title="输入材料" extra={<Tag color="blue">支持文本和文件</Tag>}>
+      <Card className="panel-card" title="输入材料" extra={<Tag color="blue">支持文本和文件</Tag>}>
         <Tabs
           items={[
             {
@@ -529,7 +606,7 @@ function App() {
                       创建文本文档
                     </Button>
                   </Space>
-                  <Card size="small" title="内容预览">
+                  <Card size="small" title="内容预览" className="soft-card">
                     <Paragraph ellipsis={{ rows: 4, expandable: true }}>{textContent || "暂无需求文本。"}</Paragraph>
                   </Card>
                 </div>
@@ -565,6 +642,7 @@ function App() {
     return (
       <div className="stack">
         <Card
+          className="panel-card"
           title="解析结果"
           extra={
             <Space wrap>
@@ -584,12 +662,12 @@ function App() {
               <DocumentDescriptions documentInfo={documentInfo} parseSummary={parseSummary} />
               <Row gutter={[16, 16]}>
                 <Col xs={24} lg={12}>
-                  <Card size="small" title="元数据">
+                  <Card size="small" title="元数据" className="soft-card">
                     <pre className="json-box">{formatJson(documentInfo.metadataJson || parseSummary?.metadataJson)}</pre>
                   </Card>
                 </Col>
                 <Col xs={24} lg={12}>
-                  <Card size="small" title="正文预览">
+                  <Card size="small" title="正文预览" className="soft-card">
                     <Paragraph copyable ellipsis={{ rows: 8, expandable: true }}>
                       {documentInfo.rawTextSummary || "解析完成后会展示正文摘要。"}
                     </Paragraph>
@@ -599,7 +677,7 @@ function App() {
             </div>
           )}
         </Card>
-        <Card title="Chunk 分块结果" extra={<Tag>{chunks.length} 个 chunks</Tag>}>
+        <Card className="panel-card" title="Chunk 分块结果" extra={<Tag>{chunks.length} 个 chunks</Tag>}>
           <Table<DocumentChunkVO>
             rowKey="chunkId"
             columns={chunkColumns}
@@ -616,7 +694,7 @@ function App() {
   function renderGenerateStep() {
     return (
       <div className="stack">
-        <Card title="生成配置">
+        <Card className="panel-card" title="生成配置">
           <Row gutter={[16, 16]}>
             <Col xs={24} md={8}>
               <Text type="secondary">模型</Text>
@@ -642,6 +720,7 @@ function App() {
           />
         </Card>
         <Card
+          className="panel-card"
           title="AI 生成"
           extra={
             <Space wrap>
@@ -665,7 +744,7 @@ function App() {
               <Statistic title="生成草稿" value={generationResult?.draftCount || drafts.length} suffix="条" />
             </Col>
             <Col xs={24} md={8}>
-              <Statistic title="校验失败" value={validations.filter((item) => item.status === "FAILED").length} suffix="项" />
+              <Statistic title="校验失败" value={failedValidations} suffix="项" />
             </Col>
           </Row>
           <Divider />
@@ -697,6 +776,7 @@ function App() {
   function renderReviewStep() {
     return (
       <Card
+        className="panel-card"
         title="人工确认"
         extra={
           <Space wrap>
@@ -726,6 +806,7 @@ function App() {
     return (
       <div className="stack">
         <Card
+          className="panel-card"
           title="正式测试用例"
           extra={
             <Space wrap>
@@ -758,13 +839,75 @@ function App() {
     return (
       <Card title="当前结果摘要" className="side-card">
         <Space direction="vertical" className="full-width" size="middle">
+          <div className="summary-head">
+            <Badge status={busy ? "processing" : "default"} />
+            <Text strong>{busy ? loadingText(busy) : "等待操作"}</Text>
+          </div>
           <SummaryItem label="文档状态" value={documentInfo?.parseStatus || "未开始"} status={documentInfo?.parseStatus} />
           <SummaryItem label="文本长度" value={`${documentInfo?.rawTextLength || parseSummary?.rawTextLength || 0}`} />
           <SummaryItem label="Chunk 数量" value={`${chunks.length || parseSummary?.chunkCount || 0}`} />
-          <SummaryItem label="草稿数量" value={`${drafts.length}`} />
+          <SummaryItem label="待确认草稿" value={`${pendingDrafts}`} status={pendingDrafts ? "PENDING" : undefined} />
+          <SummaryItem label="已确认草稿" value={`${approvedDrafts}`} status={approvedDrafts ? "APPROVED" : undefined} />
           <SummaryItem label="正式用例" value={`${cases.length}`} />
         </Space>
       </Card>
+    );
+  }
+
+  function renderMetricStrip() {
+    const metrics = [
+      {
+        label: "文档解析结果",
+        value: documentInfo?.rawTextLength || parseSummary?.rawTextLength || 0,
+        suffix: "字",
+        icon: <FileSearchOutlined />,
+        color: "blue"
+      },
+      {
+        label: "Chunk 数量",
+        value: chunks.length || parseSummary?.chunkCount || 0,
+        suffix: "个",
+        icon: <DatabaseOutlined />,
+        color: "green"
+      },
+      {
+        label: "AI 生成草稿",
+        value: generationResult?.draftCount || drafts.length,
+        suffix: "条",
+        icon: <RobotOutlined />,
+        color: "purple"
+      },
+      {
+        label: "校验通过",
+        value: passedValidations,
+        suffix: failedValidations ? `项 / 失败 ${failedValidations}` : "项",
+        icon: <BarChartOutlined />,
+        color: failedValidations ? "orange" : "cyan"
+      },
+      {
+        label: "待确认",
+        value: pendingDrafts,
+        suffix: "条",
+        icon: <ClockCircleOutlined />,
+        color: pendingDrafts ? "gold" : "default"
+      }
+    ];
+
+    return (
+      <div className="metric-strip">
+        {metrics.map((item) => (
+          <div className={`metric-card metric-${item.color}`} key={item.label}>
+            <div className="metric-icon">{item.icon}</div>
+            <div>
+              <Text type="secondary">{item.label}</Text>
+              <div className="metric-value">
+                <span>{item.value}</span>
+                <Text type="secondary">{item.suffix}</Text>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
     );
   }
 
@@ -795,70 +938,6 @@ function App() {
     setEditingDraft(draft);
     draftForm.setFieldsValue(draftToForm(draft));
   }
-
-  const chunkColumns: ColumnsType<DocumentChunkVO> = [
-    { title: "Chunk ID", dataIndex: "chunkId", width: 180, fixed: "left" },
-    { title: "序号", dataIndex: "chunkIndex", width: 80, sorter: (a, b) => a.chunkIndex - b.chunkIndex },
-    { title: "所属章节", dataIndex: "sectionTitle", width: 160, render: (value) => value || "默认章节" },
-    { title: "字数", width: 90, render: (_, record) => record.chunkText?.length || 0 },
-    { title: "Token 估算", dataIndex: "tokenCount", width: 120, render: (value) => value || 0 },
-    {
-      title: "内容预览",
-      dataIndex: "chunkText",
-      render: (value: string) => <Text ellipsis>{value || "暂无内容"}</Text>
-    },
-    {
-      title: "操作",
-      width: 90,
-      render: (_, record) => (
-        <Button size="small" onClick={() => setActiveChunk(record)}>
-          查看
-        </Button>
-      )
-    }
-  ];
-
-  const draftColumns: ColumnsType<TestCaseDraftVO> = [
-    {
-      title: "状态",
-      dataIndex: "reviewStatus",
-      width: 110,
-      render: (value) => <StatusTag value={value} />
-    },
-    { title: "用例标题", dataIndex: "title", width: 260, render: (value) => <Text strong>{value}</Text> },
-    { title: "优先级", dataIndex: "priority", width: 90, render: (value) => <Tag color="blue">{value || "-"}</Tag> },
-    { title: "类型", dataIndex: "caseType", width: 130 },
-    { title: "风险等级", dataIndex: "riskLevel", width: 110, render: (value) => <RiskTag value={value} /> },
-    { title: "关联需求", dataIndex: "requirementRefsJson", width: 180, render: (value) => renderJsonTags(value) },
-    {
-      title: "操作",
-      width: 230,
-      fixed: "right",
-      render: (_, record) => (
-        <Space wrap>
-          <Button size="small" icon={<EditOutlined />} onClick={() => openDraftEditor(record)}>
-            编辑
-          </Button>
-          <Button size="small" type="primary" onClick={() => approveDraft(record)}>
-            确认
-          </Button>
-          <Button size="small" danger onClick={() => rejectDraft(record)}>
-            驳回
-          </Button>
-        </Space>
-      )
-    }
-  ];
-
-  const caseColumns: ColumnsType<TestCaseVO> = [
-    { title: "Case ID", dataIndex: "caseId", width: 130 },
-    { title: "标题", dataIndex: "title", width: 280, render: (value) => <Text strong>{value}</Text> },
-    { title: "优先级", dataIndex: "priority", width: 90, render: (value) => <Tag color="blue">{value || "-"}</Tag> },
-    { title: "类型", dataIndex: "caseType", width: 130 },
-    { title: "风险", dataIndex: "riskLevel", width: 100, render: (value) => <RiskTag value={value} /> },
-    { title: "状态", dataIndex: "status", width: 100, render: (value) => <Tag color="green">{value || "ACTIVE"}</Tag> },
-    { title: "关联需求", dataIndex: "requirementRefsJson", render: (value) => renderJsonTags(value) }
-  ];
 }
 
 function validateFile(file: File) {

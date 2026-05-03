@@ -35,6 +35,7 @@ public class AiTestopsGenerationRecordServiceImpl
         vo.setDocumentId(record.getDocumentId());
         vo.setRequirementExtractId(record.getRequirementExtractId());
         vo.setPromptTemplateCode(record.getPromptTemplateCode());
+        vo.setPromptTemplateVersion(record.getPromptTemplateVersion());
         vo.setModelCode(record.getModelCode());
         vo.setModelName(record.getModelName());
         vo.setGenerationType(record.getGenerationType());

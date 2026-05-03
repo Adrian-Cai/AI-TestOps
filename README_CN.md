@@ -19,6 +19,7 @@ AI 测试设计 Demo 后端与静态前端页面，覆盖文档接入解析、AI
 - 前端页面：`http://localhost:8080/`
 - Knife4j 接口文档：`http://localhost:8080/doc.html`
 - 启动运行说明：[docs/启动运行说明.md](docs/启动运行说明.md)
+- 真实大模型联调：[docs/真实大模型联调.md](docs/真实大模型联调.md)
 
 ## 启动
 

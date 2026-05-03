@@ -19,4 +19,5 @@ public class AiModelProperties {
     private String apiKey;
     private BigDecimal temperature = new BigDecimal("0.2");
     private Integer maxTokens = 4096;
+    private Boolean jsonMode = false;
 }

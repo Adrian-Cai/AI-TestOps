@@ -20,6 +20,7 @@ public class AiTestopsGenerationRecord {
     private String documentId;
     private String requirementExtractId;
     private String promptTemplateCode;
+    private String promptTemplateVersion;
     private String modelCode;
     private String modelName;
     private String generationType;
