@@ -30,10 +30,10 @@ import com.example.aitestops.document.service.AiTestopsDocumentChunkService;
 import com.example.aitestops.document.service.AiTestopsDocumentService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
@@ -60,7 +60,6 @@ public class AiTestopsRequirementExtractServiceImpl
     private final ObjectMapper objectMapper;
 
     @Override
-    @Transactional(noRollbackFor = BusinessException.class)
     public RequirementExtractVO extractRequirements(RequirementExtractRequest request) {
         AiTestopsDocument document = getParsedDocument(request.getDocumentId());
         AiTestopsPromptTemplate template = promptTemplateService.getEnabledTemplate(request.getPromptTemplateCode());
@@ -88,7 +87,13 @@ public class AiTestopsRequirementExtractServiceImpl
                     .build());
 
             log.info("AI 原始返回内容长度: generationId={}, length={}", generationId, response.getContent().length());
-            JsonNode root = parseAndValidateRequirementJson(response.getContent(), generationId);
+            JsonNode root;
+            try {
+                root = parseAndValidateRequirementJson(response, generationId);
+            } catch (BusinessException ex) {
+                updateGenerationFailed(generationId, response.getRawResponseJson(), ex.getMessage());
+                throw ex;
+            }
             AiTestopsRequirementExtract extract = saveRequirementExtract(document.getDocumentId(), generationId, root, response.getContent());
             updateGenerationSuccess(generationId, extract.getRequirementExtractId(), response);
             log.info("需求解析完成: documentId={}, generationId={}, requirementExtractId={}",
@@ -172,33 +177,66 @@ public class AiTestopsRequirementExtractServiceImpl
             chunkMap.put("chunk_text", chunk.getChunkText());
             return chunkMap;
         }).toList());
-        return "请基于以下文档 chunks 提取结构化需求信息：\n" + JsonUtil.toJson(objectMapper, input);
+        return """
+                请基于以下文档 chunks 提取结构化需求信息。
+                输出约束：
+                1. 只输出一个紧凑 JSON object，不要输出 Markdown 或解释。
+                2. requirements 最多 20 条；business_rules、api_list、field_constraints、exception_cases、risks 各最多 20 条。
+                3. title 不超过 60 个中文字符，content 不超过 160 个中文字符；source_chunks 只保留 chunk_id。
+                4. 没有内容的分类字段必须输出空数组 []，不要省略字段。
+                5. 不要逐字复述原文，只提取可测试、可校验的关键信息。
+                文档输入：
+                """ + JsonUtil.toJson(objectMapper, input);
     }
 
-    private JsonNode parseAndValidateRequirementJson(String content, String generationId) {
+    JsonNode parseAndValidateRequirementJson(AiChatResponse response, String generationId) {
         try {
-            JsonNode root = objectMapper.readTree(AiJsonExtractor.extractJsonObject(content));
-            validateArrayField(root, "requirements", generationId);
-            validateArrayField(root, "business_rules", generationId);
-            validateArrayField(root, "api_list", generationId);
-            validateArrayField(root, "field_constraints", generationId);
-            validateArrayField(root, "exception_cases", generationId);
-            validateArrayField(root, "risks", generationId);
+            JsonNode root = objectMapper.readTree(AiJsonExtractor.extractJsonObject(response.getContent()));
+            if (!root.isObject()) {
+                throw new BusinessException(ErrorCode.AI_OUTPUT_INVALID,
+                        "AI 输出根节点必须是 JSON 对象, generationId=" + generationId);
+            }
+            ObjectNode normalized = (ObjectNode) root;
+            validateRequiredArrayField(normalized, "requirements", generationId);
+            normalizeOptionalArrayField(normalized, "business_rules", generationId);
+            normalizeOptionalArrayField(normalized, "api_list", generationId);
+            normalizeOptionalArrayField(normalized, "field_constraints", generationId);
+            normalizeOptionalArrayField(normalized, "exception_cases", generationId);
+            normalizeOptionalArrayField(normalized, "risks", generationId);
             log.info("JSON 解析结果: generationId={}, valid=true", generationId);
-            return root;
+            return normalized;
         } catch (BusinessException ex) {
             throw ex;
         } catch (Exception ex) {
             log.warn("JSON 解析结果: generationId={}, valid=false", generationId, ex);
-            throw new BusinessException(ErrorCode.AI_OUTPUT_INVALID, "AI 输出不是合法 JSON: " + ex.getMessage(), ex);
+            throw new BusinessException(ErrorCode.AI_OUTPUT_INVALID, buildInvalidJsonMessage(response, ex), ex);
         }
     }
 
-    private void validateArrayField(JsonNode root, String fieldName, String generationId) {
+    private String buildInvalidJsonMessage(AiChatResponse response, Exception ex) {
+        if ("length".equalsIgnoreCase(response.getFinishReason())) {
+            return "AI 输出不是合法 JSON，模型输出达到 max_tokens 上限被截断，请减少输入内容或提高 AI_MAX_TOKENS: " + ex.getMessage();
+        }
+        return "AI 输出不是合法 JSON: " + ex.getMessage();
+    }
+
+    private void validateRequiredArrayField(ObjectNode root, String fieldName, String generationId) {
         JsonNode node = root.get(fieldName);
         if (node == null || !node.isArray()) {
             throw new BusinessException(ErrorCode.AI_OUTPUT_INVALID,
                     "AI 输出字段缺失或类型错误: " + fieldName + ", generationId=" + generationId);
+        }
+    }
+
+    private void normalizeOptionalArrayField(ObjectNode root, String fieldName, String generationId) {
+        JsonNode node = root.get(fieldName);
+        if (node == null || node.isNull()) {
+            root.set(fieldName, objectMapper.createArrayNode());
+            return;
+        }
+        if (!node.isArray()) {
+            throw new BusinessException(ErrorCode.AI_OUTPUT_INVALID,
+                    "AI 输出字段类型错误: " + fieldName + ", generationId=" + generationId);
         }
     }
 
@@ -236,15 +274,23 @@ public class AiTestopsRequirementExtractServiceImpl
     }
 
     private void updateGenerationFailed(String generationId, String message) {
+        updateGenerationFailed(generationId, null, message);
+    }
+
+    private void updateGenerationFailed(String generationId, String outputJson, String message) {
         if (generationId == null) {
             return;
         }
-        generationRecordService.update(new LambdaUpdateWrapper<AiTestopsGenerationRecord>()
+        LambdaUpdateWrapper<AiTestopsGenerationRecord> wrapper = new LambdaUpdateWrapper<AiTestopsGenerationRecord>()
                 .eq(AiTestopsGenerationRecord::getGenerationId, generationId)
                 .set(AiTestopsGenerationRecord::getStatus, GenerationStatusEnum.FAILED.name())
                 .set(AiTestopsGenerationRecord::getErrorMessage, truncate(message, 1000))
                 .set(AiTestopsGenerationRecord::getFinishedAt, LocalDateTime.now())
-                .set(AiTestopsGenerationRecord::getUpdatedAt, LocalDateTime.now()));
+                .set(AiTestopsGenerationRecord::getUpdatedAt, LocalDateTime.now());
+        if (outputJson != null) {
+            wrapper.set(AiTestopsGenerationRecord::getOutputJson, outputJson);
+        }
+        generationRecordService.update(wrapper);
     }
 
     private RequirementExtractVO toVO(AiTestopsRequirementExtract extract) {

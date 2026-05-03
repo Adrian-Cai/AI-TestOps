@@ -44,18 +44,7 @@ public class OpenAiCompatibleClient implements AiClient {
         validateConfig();
 
         String modelName = StringUtils.hasText(request.getModelName()) ? request.getModelName() : aiModelProperties.getModelName();
-        Map<String, Object> body = new LinkedHashMap<>();
-        body.put("model", modelName);
-        body.put("messages", List.of(
-                Map.of("role", "system", "content", request.getSystemPrompt()),
-                Map.of("role", "user", "content", request.getUserPrompt())
-        ));
-        body.put("temperature", aiModelProperties.getTemperature());
-        body.put("max_tokens", aiModelProperties.getMaxTokens());
-        if (Boolean.TRUE.equals(aiModelProperties.getJsonMode())) {
-            body.put("response_format", Map.of("type", "json_object"));
-        }
-
+        Map<String, Object> body = buildRequestBody(request, modelName);
         String endpoint = aiModelProperties.getApiBase().replaceAll("/+$", "") + "/v1/chat/completions";
         log.info("AI 请求开始: provider={}, modelCode={}, modelName={}, endpoint={}",
                 provider, request.getModelCode(), modelName, endpoint);
@@ -78,6 +67,21 @@ public class OpenAiCompatibleClient implements AiClient {
         }
     }
 
+    Map<String, Object> buildRequestBody(AiChatRequest request, String modelName) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("model", modelName);
+        body.put("messages", List.of(
+                Map.of("role", "system", "content", request.getSystemPrompt()),
+                Map.of("role", "user", "content", request.getUserPrompt())
+        ));
+        body.put("temperature", aiModelProperties.getTemperature());
+        body.put("max_tokens", aiModelProperties.getMaxTokens());
+        if (Boolean.TRUE.equals(aiModelProperties.getJsonMode())) {
+            body.put("response_format", Map.of("type", "json_object"));
+        }
+        return body;
+    }
+
     private void validateConfig() {
         if (!StringUtils.hasText(aiModelProperties.getApiBase()) || !StringUtils.hasText(aiModelProperties.getApiKey())) {
             throw new BusinessException(ErrorCode.AI_CONFIG_INVALID, "AI_API_BASE 或 AI_API_KEY 未配置");
@@ -87,7 +91,8 @@ public class OpenAiCompatibleClient implements AiClient {
     private AiChatResponse parseResponse(String responseBody, String modelName) {
         try {
             JsonNode root = objectMapper.readTree(responseBody);
-            String content = root.path("choices").path(0).path("message").path("content").asText();
+            JsonNode choice = root.path("choices").path(0);
+            String content = choice.path("message").path("content").asText();
             if (!StringUtils.hasText(content)) {
                 throw new BusinessException(ErrorCode.AI_OUTPUT_INVALID, "AI 响应 choices[0].message.content 为空");
             }
@@ -99,6 +104,7 @@ public class OpenAiCompatibleClient implements AiClient {
                     .completionTokens(usage.path("completion_tokens").isMissingNode() ? null : usage.path("completion_tokens").asInt())
                     .totalTokens(usage.path("total_tokens").isMissingNode() ? null : usage.path("total_tokens").asInt())
                     .modelName(root.path("model").asText(modelName))
+                    .finishReason(choice.path("finish_reason").asText(null))
                     .build();
         } catch (BusinessException ex) {
             throw ex;
@@ -139,6 +145,7 @@ public class OpenAiCompatibleClient implements AiClient {
                 .completionTokens(estimateTokens(content))
                 .totalTokens(estimateTokens(request.getSystemPrompt()) + estimateTokens(request.getUserPrompt()) + estimateTokens(content))
                 .modelName(aiModelProperties.getModelName())
+                .finishReason("stop")
                 .build();
     }
 
@@ -168,6 +175,7 @@ public class OpenAiCompatibleClient implements AiClient {
                 .completionTokens(estimateTokens(content))
                 .totalTokens(estimateTokens(request.getSystemPrompt()) + estimateTokens(request.getUserPrompt()) + estimateTokens(content))
                 .modelName(aiModelProperties.getModelName())
+                .finishReason("stop")
                 .build();
     }
 

@@ -48,6 +48,7 @@ import com.example.aitestops.testcase.vo.TestCaseGenerateVO;
 import com.example.aitestops.testcase.vo.TestCaseVO;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -86,7 +87,6 @@ public class AiTestopsTestCaseDraftServiceImpl
     private final ObjectMapper objectMapper;
 
     @Override
-    @Transactional(noRollbackFor = BusinessException.class)
     public TestCaseGenerateVO generateDrafts(TestCaseGenerateRequest request) {
         validateGenerateRequest(request);
         AiTestopsRequirementExtract requirementExtract = resolveRequirementExtract(request);
@@ -111,7 +111,7 @@ public class AiTestopsTestCaseDraftServiceImpl
                     .build());
             log.info("AI 原始返回内容长度: generationId={}, length={}", generationId, response.getContent().length());
 
-            JsonNode root = parseJsonOrSaveSchemaFailure(generationId, response.getContent());
+            JsonNode root = parseJsonOrSaveSchemaFailure(generationId, response);
             List<String> validationErrors = validateAndSaveResults(generationId, root);
             if (!validationErrors.isEmpty()) {
                 updateGenerationFailed(generationId, response.getRawResponseJson(), "AI 输出校验失败");
@@ -341,26 +341,97 @@ public class AiTestopsTestCaseDraftServiceImpl
             chunkMap.put("chunk_text", chunk.getChunkText());
             return chunkMap;
         }).toList());
-        return "请基于以下结构化需求或文档 chunks 生成测试用例：\n" + JsonUtil.toJson(objectMapper, input);
+        return """
+                请基于以下结构化需求和文档 chunks 生成测试用例。
+                输出约束：
+                1. 只输出一个紧凑 JSON object，不要输出 Markdown 或解释。
+                2. 根对象必须且只能使用字段 test_cases，test_cases 必须是非空数组。
+                3. test_cases 最多 30 条，每条必须包含 case_id、title、preconditions、steps、priority、case_type、risk_level、requirement_refs、risk_tags。
+                4. steps 必须是非空数组，每个 step 必须包含 step_no、action、expected_result。
+                5. case_type 覆盖 NORMAL、EXCEPTION、BOUNDARY；priority 只能使用 P0、P1、P2、P3；risk_level 只能使用 HIGH、MEDIUM、LOW。
+                6. requirement_refs 只引用输入中的 requirement_id。
+                7. title 不超过 80 个中文字符，action 和 expected_result 各不超过 160 个中文字符。
+                输入：
+                """ + JsonUtil.toJson(objectMapper, input);
     }
 
-    private JsonNode parseJsonOrSaveSchemaFailure(String generationId, String content) {
+    JsonNode parseJsonOrSaveSchemaFailure(String generationId, AiChatResponse response) {
         try {
-            JsonNode root = objectMapper.readTree(AiJsonExtractor.extractJsonObject(content));
-            JsonNode testCases = root.get("test_cases");
+            JsonNode root = objectMapper.readTree(AiJsonExtractor.extractJsonObject(response.getContent()));
+            JsonNode normalizedRoot = normalizeTestCaseRoot(root);
+            JsonNode testCases = normalizedRoot.get("test_cases");
             if (testCases == null || !testCases.isArray() || testCases.isEmpty()) {
+                String message = "AI 输出 test_cases 字段缺失、不是数组或为空";
                 saveValidation(generationId, ValidationTypeEnum.SCHEMA, ValidationStatusEnum.FAILED,
                         List.of("test_cases 字段缺失、不是数组或为空"));
-                throw new BusinessException(ErrorCode.AI_OUTPUT_INVALID, "AI 输出 test_cases 字段缺失、不是数组或为空");
+                updateGenerationFailed(generationId, response.getRawResponseJson(), message);
+                throw new BusinessException(ErrorCode.AI_OUTPUT_INVALID, message);
             }
-            return root;
+            return normalizedRoot;
         } catch (BusinessException ex) {
             throw ex;
         } catch (Exception ex) {
+            String message = buildInvalidJsonMessage(response, ex);
             saveValidation(generationId, ValidationTypeEnum.SCHEMA, ValidationStatusEnum.FAILED,
-                    List.of("AI 输出不是合法 JSON: " + ex.getMessage()));
-            throw new BusinessException(ErrorCode.AI_OUTPUT_INVALID, "AI 输出不是合法 JSON: " + ex.getMessage(), ex);
+                    List.of(message));
+            updateGenerationFailed(generationId, response.getRawResponseJson(), message);
+            throw new BusinessException(ErrorCode.AI_OUTPUT_INVALID, message, ex);
         }
+    }
+
+    private JsonNode normalizeTestCaseRoot(JsonNode root) {
+        if (root == null || root.isNull()) {
+            return objectMapper.createObjectNode();
+        }
+        if (root.isArray()) {
+            ObjectNode normalized = objectMapper.createObjectNode();
+            normalized.set("test_cases", root);
+            return normalized;
+        }
+        if (!root.isObject()) {
+            return root;
+        }
+        if (hasNonEmptyArray(root, "test_cases")) {
+            return root;
+        }
+        ObjectNode normalized = (ObjectNode) root;
+        for (String alias : List.of("cases", "testCases", "test_case_list", "testCaseList")) {
+            JsonNode candidate = normalized.get(alias);
+            if (candidate != null && candidate.isArray()) {
+                normalized.set("test_cases", candidate);
+                return normalized;
+            }
+        }
+        for (String wrapper : List.of("data", "result", "output")) {
+            JsonNode nested = normalized.get(wrapper);
+            if (nested == null || !nested.isObject()) {
+                continue;
+            }
+            if (hasNonEmptyArray(nested, "test_cases")) {
+                normalized.set("test_cases", nested.get("test_cases"));
+                return normalized;
+            }
+            for (String alias : List.of("cases", "testCases", "test_case_list", "testCaseList")) {
+                JsonNode candidate = nested.get(alias);
+                if (candidate != null && candidate.isArray()) {
+                    normalized.set("test_cases", candidate);
+                    return normalized;
+                }
+            }
+        }
+        return normalized;
+    }
+
+    private boolean hasNonEmptyArray(JsonNode root, String fieldName) {
+        JsonNode node = root.get(fieldName);
+        return node != null && node.isArray() && !node.isEmpty();
+    }
+
+    private String buildInvalidJsonMessage(AiChatResponse response, Exception ex) {
+        if ("length".equalsIgnoreCase(response.getFinishReason())) {
+            return "AI 输出不是合法 JSON，模型输出达到 max_tokens 上限被截断，请减少输入内容或提高 AI_MAX_TOKENS: " + ex.getMessage();
+        }
+        return "AI 输出不是合法 JSON: " + ex.getMessage();
     }
 
     private List<String> validateAndSaveResults(String generationId, JsonNode root) {

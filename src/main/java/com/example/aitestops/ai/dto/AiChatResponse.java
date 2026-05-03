@@ -16,4 +16,5 @@ public class AiChatResponse {
     private Integer completionTokens;
     private Integer totalTokens;
     private String modelName;
+    private String finishReason;
 }

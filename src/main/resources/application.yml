@@ -9,6 +9,11 @@ spring:
     url: ${DB_URL:jdbc:mariadb://localhost:3306/ai_testops?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
     username: ${DB_USERNAME:root}
     password: ${DB_PASSWORD:}
+    hikari:
+      connection-timeout: ${DB_HIKARI_CONNECTION_TIMEOUT:30000}
+      validation-timeout: ${DB_HIKARI_VALIDATION_TIMEOUT:5000}
+      keepalive-time: ${DB_HIKARI_KEEPALIVE_TIME:30000}
+      max-lifetime: ${DB_HIKARI_MAX_LIFETIME:300000}
   servlet:
     multipart:
       max-file-size: ${UPLOAD_MAX_FILE_SIZE:50MB}
@@ -65,4 +70,4 @@ ai-testops:
     api-key: ${AI_API_KEY:}
     temperature: ${AI_TEMPERATURE:0.2}
     max-tokens: ${AI_MAX_TOKENS:4096}
-    json-mode: ${AI_JSON_MODE:false}
+    json-mode: ${AI_JSON_MODE:true}

@@ -9,6 +9,7 @@ import lombok.Getter;
 public enum ErrorCode {
 
     BAD_REQUEST(400, "请求参数不合法"),
+    RESOURCE_NOT_FOUND(404, "资源不存在"),
     FILE_EMPTY(400, "文件为空"),
     FILE_TYPE_UNSUPPORTED(400, "文件类型不支持"),
     FILE_TOO_LARGE(400, "文件超过大小限制"),
