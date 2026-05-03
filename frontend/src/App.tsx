@@ -15,6 +15,7 @@ import {
   Layout,
   List,
   Menu,
+  Progress,
   Row,
   Select,
   Space,
@@ -48,7 +49,7 @@ import {
   RobotOutlined,
   SaveOutlined
 } from "@ant-design/icons";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
 import type {
   DocumentChunkVO,
@@ -96,6 +97,58 @@ function App() {
   const [messageApi, contextHolder] = message.useMessage();
   const [currentStep, setCurrentStep] = useState<StepKey>("input");
   const [busy, setBusy] = useState<string | null>(null);
+  const [progressPercent, setProgressPercent] = useState(0);
+  const [progressLabel, setProgressLabel] = useState("");
+  const [progressVisible, setProgressVisible] = useState(false);
+  const progressTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const progressDoneRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const longOps = ["extract", "generate"];
+    if (busy && longOps.includes(busy)) {
+      setProgressVisible(true);
+      setProgressPercent(0);
+      setProgressLabel(busy === "extract" ? "正在提取结构化需求..." : "正在生成测试用例草稿...");
+      if (progressDoneRef.current) clearTimeout(progressDoneRef.current);
+      const start = Date.now();
+      progressTimerRef.current = setInterval(() => {
+        const elapsed = (Date.now() - start) / 1000;
+        let pct: number;
+        if (elapsed < 2) {
+          pct = Math.min(30, elapsed * 15);
+        } else if (elapsed < 8) {
+          pct = 30 + (elapsed - 2) * 5;
+        } else {
+          pct = 60 + Math.min(30, (elapsed - 8) * 1.5);
+        }
+        pct = Math.min(90, Math.round(pct));
+        setProgressPercent(pct);
+        if (pct < 35) setProgressLabel(busy === "extract" ? "大模型正在分析业务规则..." : "大模型正在生成测试用例草稿...");
+        else if (pct < 65) setProgressLabel(busy === "extract" ? "正在处理 AI 返回内容..." : "正在校验和保存生成结果...");
+        else setProgressLabel("正在保存数据...");
+      }, 600);
+      return () => {
+        if (progressTimerRef.current) {
+          clearInterval(progressTimerRef.current);
+          progressTimerRef.current = null;
+        }
+      };
+    } else if (!busy && progressVisible) {
+      if (progressTimerRef.current) {
+        clearInterval(progressTimerRef.current);
+        progressTimerRef.current = null;
+      }
+      setProgressPercent(100);
+      setProgressLabel("处理完成");
+      progressDoneRef.current = setTimeout(() => {
+        setProgressVisible(false);
+        setProgressPercent(0);
+      }, 2000);
+      return () => {
+        if (progressDoneRef.current) clearTimeout(progressDoneRef.current);
+      };
+    }
+  }, [busy]);
   const [textTitle, setTextTitle] = useState("订单需求");
   const [textContent, setTextContent] = useState(exampleRequirement);
   const [uploadTitle, setUploadTitle] = useState("");
@@ -748,6 +801,18 @@ function App() {
             </Col>
           </Row>
           <Divider />
+          {progressVisible && (
+            <div style={{ marginBottom: 16 }}>
+              <Progress
+                percent={progressPercent}
+                status={progressPercent === 100 ? "success" : "active"}
+                strokeColor={{ from: "#108ee9", to: "#87d068" }}
+              />
+              <Text type="secondary" style={{ display: "block", textAlign: "center", marginTop: 4 }}>
+                {progressLabel}
+              </Text>
+            </div>
+          )}
           <Alert
             showIcon
             type={generationResult ? "success" : "info"}

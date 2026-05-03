@@ -77,7 +77,24 @@ public class OpenAiCompatibleClient implements AiClient {
         body.put("temperature", aiModelProperties.getTemperature());
         body.put("max_tokens", aiModelProperties.getMaxTokens());
         if (Boolean.TRUE.equals(aiModelProperties.getJsonMode())) {
-            body.put("response_format", Map.of("type", "json_object"));
+            if (org.springframework.util.StringUtils.hasText(request.getJsonSchema())) {
+                try {
+                    JsonNode schemaNode = objectMapper.readTree(request.getJsonSchema());
+                    Map<String, Object> responseFormat = new LinkedHashMap<>();
+                    responseFormat.put("type", "json_schema");
+                    Map<String, Object> jsonSchemaMap = new LinkedHashMap<>();
+                    jsonSchemaMap.put("name", "structured_output");
+                    jsonSchemaMap.put("strict", true);
+                    jsonSchemaMap.put("schema", objectMapper.convertValue(schemaNode, Map.class));
+                    responseFormat.put("json_schema", jsonSchemaMap);
+                    body.put("response_format", responseFormat);
+                } catch (Exception e) {
+                    log.warn("json_schema 解析失败，回退使用 json_object 模式: {}", e.getMessage());
+                    body.put("response_format", Map.of("type", "json_object"));
+                }
+            } else {
+                body.put("response_format", Map.of("type", "json_object"));
+            }
         }
         return body;
     }

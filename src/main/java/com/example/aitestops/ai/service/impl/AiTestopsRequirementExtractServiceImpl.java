@@ -84,6 +84,7 @@ public class AiTestopsRequirementExtractServiceImpl
                     .systemPrompt(template.getPromptContent())
                     .userPrompt(userPrompt)
                     .generationType(GenerationTypeEnum.REQUIREMENT_EXTRACT.name())
+                    .jsonSchema(template.getJsonSchema())
                     .build());
 
             log.info("AI 原始返回内容长度: generationId={}, length={}", generationId, response.getContent().length());

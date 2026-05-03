@@ -108,6 +108,7 @@ public class AiTestopsTestCaseDraftServiceImpl
                     .systemPrompt(template.getPromptContent())
                     .userPrompt(buildUserPrompt(document, requirementExtract, chunks))
                     .generationType(GenerationTypeEnum.TEST_CASE_GENERATE.name())
+                    .jsonSchema(template.getJsonSchema())
                     .build());
             log.info("AI 原始返回内容长度: generationId={}, length={}", generationId, response.getContent().length());
 
@@ -419,7 +420,26 @@ public class AiTestopsTestCaseDraftServiceImpl
                 }
             }
         }
+        String bestKey = findBestArrayCandidate(normalized);
+        if (bestKey != null) {
+            normalized.set("test_cases", normalized.get(bestKey));
+            log.info("normalizeTestCaseRoot 使用兜底匹配: key={}", bestKey);
+        }
         return normalized;
+    }
+
+    private String findBestArrayCandidate(ObjectNode root) {
+        String bestKey = null;
+        int bestSize = 0;
+        var fields = root.fields();
+        while (fields.hasNext()) {
+            var entry = fields.next();
+            if (entry.getValue().isArray() && entry.getValue().size() > bestSize) {
+                bestSize = entry.getValue().size();
+                bestKey = entry.getKey();
+            }
+        }
+        return bestKey;
     }
 
     private boolean hasNonEmptyArray(JsonNode root, String fieldName) {

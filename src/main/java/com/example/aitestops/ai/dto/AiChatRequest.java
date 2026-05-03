@@ -15,4 +15,5 @@ public class AiChatRequest {
     private String systemPrompt;
     private String userPrompt;
     private String generationType;
+    private String jsonSchema;
 }
