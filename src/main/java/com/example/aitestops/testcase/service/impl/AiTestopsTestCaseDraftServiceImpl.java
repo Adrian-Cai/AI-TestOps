@@ -94,13 +94,14 @@ public class AiTestopsTestCaseDraftServiceImpl
         AiTestopsPromptTemplate template = promptTemplateService.getEnabledTemplate(request.getPromptTemplateCode());
         List<AiTestopsDocumentChunk> chunks = listChunks(document.getDocumentId());
 
-        String generationId = IdGenerator.generationId();
-        String inputSnapshotJson = JsonUtil.toJson(objectMapper, buildInputSnapshot(document, requirementExtract, template, chunks, request));
-        AiTestopsGenerationRecord record = createProcessingRecord(generationId, document, requirementExtract, template, request, inputSnapshotJson);
-        generationRecordService.save(record);
-        log.info("测试用例生成记录创建: documentId={}, generationId={}", document.getDocumentId(), generationId);
-
+        String generationId = null;
         try {
+            generationId = IdGenerator.generationId();
+            String inputSnapshotJson = JsonUtil.toJson(objectMapper, buildInputSnapshot(document, requirementExtract, template, chunks, request));
+            AiTestopsGenerationRecord record = createProcessingRecord(generationId, document, requirementExtract, template, request, inputSnapshotJson);
+            generationRecordService.save(record);
+            log.info("测试用例生成记录创建: documentId={}, generationId={}", document.getDocumentId(), generationId);
+
             AiChatResponse response = aiClient.chat(AiChatRequest.builder()
                     .modelCode(resolveModelCode(request.getModelCode()))
                     .modelName(aiModelProperties.getModelName())
@@ -313,11 +314,13 @@ public class AiTestopsTestCaseDraftServiceImpl
         snapshot.put("promptTemplateVersion", template.getVersion());
         snapshot.put("modelCode", resolveModelCode(request.getModelCode()));
         snapshot.put("requirementsJson", extract == null ? null : extract.getRequirementsJson());
-        snapshot.put("chunks", chunks.stream().map(chunk -> Map.of(
-                "chunk_id", chunk.getChunkId(),
-                "chunk_index", chunk.getChunkIndex(),
-                "chunk_text", chunk.getChunkText()
-        )).toList());
+        snapshot.put("chunks", chunks.stream().map(chunk -> {
+            Map<String, Object> chunkMap = new LinkedHashMap<>();
+            chunkMap.put("chunk_id", chunk.getChunkId());
+            chunkMap.put("chunk_index", chunk.getChunkIndex());
+            chunkMap.put("chunk_text", chunk.getChunkText());
+            return chunkMap;
+        }).toList());
         return snapshot;
     }
 
@@ -331,11 +334,13 @@ public class AiTestopsTestCaseDraftServiceImpl
         input.put("field_constraints", extract == null ? null : extract.getFieldConstraintsJson());
         input.put("exception_cases", extract == null ? null : extract.getExceptionCasesJson());
         input.put("risks", extract == null ? null : extract.getRisksJson());
-        input.put("chunks", chunks.stream().map(chunk -> Map.of(
-                "chunk_id", chunk.getChunkId(),
-                "chunk_index", chunk.getChunkIndex(),
-                "chunk_text", chunk.getChunkText()
-        )).toList());
+        input.put("chunks", chunks.stream().map(chunk -> {
+            Map<String, Object> chunkMap = new LinkedHashMap<>();
+            chunkMap.put("chunk_id", chunk.getChunkId());
+            chunkMap.put("chunk_index", chunk.getChunkIndex());
+            chunkMap.put("chunk_text", chunk.getChunkText());
+            return chunkMap;
+        }).toList());
         return "请基于以下结构化需求或文档 chunks 生成测试用例：\n" + JsonUtil.toJson(objectMapper, input);
     }
 
@@ -697,6 +702,9 @@ public class AiTestopsTestCaseDraftServiceImpl
     }
 
     private void updateGenerationFailed(String generationId, String outputJson, String message) {
+        if (generationId == null) {
+            return;
+        }
         LambdaUpdateWrapper<AiTestopsGenerationRecord> wrapper = new LambdaUpdateWrapper<AiTestopsGenerationRecord>()
                 .eq(AiTestopsGenerationRecord::getGenerationId, generationId)
                 .set(AiTestopsGenerationRecord::getStatus, GenerationStatusEnum.FAILED.name())

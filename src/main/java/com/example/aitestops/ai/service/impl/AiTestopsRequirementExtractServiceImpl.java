@@ -69,14 +69,15 @@ public class AiTestopsRequirementExtractServiceImpl
             throw new BusinessException(ErrorCode.DOCUMENT_NOT_PARSED, "文档没有 chunks，请先解析文档: " + document.getDocumentId());
         }
 
-        String generationId = IdGenerator.generationId();
-        LocalDateTime now = LocalDateTime.now();
-        String inputSnapshotJson = JsonUtil.toJson(objectMapper, buildInputSnapshot(document, template, chunks, request));
-        AiTestopsGenerationRecord record = createProcessingRecord(generationId, document.getDocumentId(), template, request, inputSnapshotJson, now);
-        generationRecordService.save(record);
-        log.info("需求解析生成记录创建: documentId={}, generationId={}", document.getDocumentId(), generationId);
-
+        String generationId = null;
         try {
+            generationId = IdGenerator.generationId();
+            LocalDateTime now = LocalDateTime.now();
+            String inputSnapshotJson = JsonUtil.toJson(objectMapper, buildInputSnapshot(document, template, chunks, request));
+            AiTestopsGenerationRecord record = createProcessingRecord(generationId, document.getDocumentId(), template, request, inputSnapshotJson, now);
+            generationRecordService.save(record);
+            log.info("需求解析生成记录创建: documentId={}, generationId={}", document.getDocumentId(), generationId);
+
             String userPrompt = buildUserPrompt(document, chunks);
             AiChatResponse response = aiClient.chat(AiChatRequest.builder()
                     .modelCode(resolveModelCode(request.getModelCode()))
@@ -150,11 +151,13 @@ public class AiTestopsRequirementExtractServiceImpl
         snapshot.put("promptTemplateCode", template.getTemplateCode());
         snapshot.put("promptTemplateVersion", template.getVersion());
         snapshot.put("modelCode", resolveModelCode(request.getModelCode()));
-        snapshot.put("chunks", chunks.stream().map(chunk -> Map.of(
-                "chunk_id", chunk.getChunkId(),
-                "chunk_index", chunk.getChunkIndex(),
-                "chunk_text", chunk.getChunkText()
-        )).toList());
+        snapshot.put("chunks", chunks.stream().map(chunk -> {
+            Map<String, Object> chunkMap = new LinkedHashMap<>();
+            chunkMap.put("chunk_id", chunk.getChunkId());
+            chunkMap.put("chunk_index", chunk.getChunkIndex());
+            chunkMap.put("chunk_text", chunk.getChunkText());
+            return chunkMap;
+        }).toList());
         return snapshot;
     }
 
@@ -162,11 +165,13 @@ public class AiTestopsRequirementExtractServiceImpl
         Map<String, Object> input = new LinkedHashMap<>();
         input.put("document_id", document.getDocumentId());
         input.put("title", document.getTitle());
-        input.put("chunks", chunks.stream().map(chunk -> Map.of(
-                "chunk_id", chunk.getChunkId(),
-                "chunk_index", chunk.getChunkIndex(),
-                "chunk_text", chunk.getChunkText()
-        )).toList());
+        input.put("chunks", chunks.stream().map(chunk -> {
+            Map<String, Object> chunkMap = new LinkedHashMap<>();
+            chunkMap.put("chunk_id", chunk.getChunkId());
+            chunkMap.put("chunk_index", chunk.getChunkIndex());
+            chunkMap.put("chunk_text", chunk.getChunkText());
+            return chunkMap;
+        }).toList());
         return "请基于以下文档 chunks 提取结构化需求信息：\n" + JsonUtil.toJson(objectMapper, input);
     }
 
@@ -231,6 +236,9 @@ public class AiTestopsRequirementExtractServiceImpl
     }
 
     private void updateGenerationFailed(String generationId, String message) {
+        if (generationId == null) {
+            return;
+        }
         generationRecordService.update(new LambdaUpdateWrapper<AiTestopsGenerationRecord>()
                 .eq(AiTestopsGenerationRecord::getGenerationId, generationId)
                 .set(AiTestopsGenerationRecord::getStatus, GenerationStatusEnum.FAILED.name())
