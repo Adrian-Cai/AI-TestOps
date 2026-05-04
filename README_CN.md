@@ -188,3 +188,10 @@ npm run build
 - **数据库连接失败**：检查 `.env` 中 `DB_URL/DB_USERNAME/DB_PASSWORD`，确认 MariaDB 已运行且已建表。
 - **AI 返回 MOCK 内容**：默认 `AI_PROVIDER=MOCK`。配置 `AI_PROVIDER/AI_API_BASE/AI_API_KEY/AI_MODEL_NAME` 后重启即可使用真实模型。
 - **AI 返回 400 关于 `response_format`**：部分供应商只支持 `json_object` 而不支持 `json_schema`。本项目已改为默认使用 `json_object`（当 `AI_JSON_MODE=true` 时）。如果供应商不支持 `json_object`，请将 `AI_JSON_MODE=false`。
+
+---
+
+## 更多资源
+
+- **自动化测试平台**: [https://autotest.wiac.xyz/](https://autotest.wiac.xyz/) — 我的自动化测试平台门户
+- **GitHub 项目地址**: [https://github.com/acai1998/AI-TestOps](https://github.com/acai1998/AI-TestOps)
