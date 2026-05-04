@@ -300,7 +300,7 @@ public class AiTestopsPromptTemplateServiceImpl
                 2. 必须包含 requirements、business_rules、api_list、field_constraints、exception_cases、risks。
                 3. requirements 中每个需求点必须包含 requirement_id、title、content、priority、risk_level、source_chunks。
                 4. priority 只能使用 P0、P1、P2、P3。
-                5. risk_level 只能使用 HIGH、MEDIUM、LOW。
+                5. risk_level 只能使用 P0、P1、P2（分别对应高、中、低）。
                 6. source_chunks 必须引用输入中的 chunk_id。
                 """;
     }

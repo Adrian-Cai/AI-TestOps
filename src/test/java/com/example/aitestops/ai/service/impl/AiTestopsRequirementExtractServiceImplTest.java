@@ -36,7 +36,7 @@ class AiTestopsRequirementExtractServiceImplTest {
                               "title": "登录",
                               "content": "用户可以登录",
                               "priority": "P1",
-                              "risk_level": "MEDIUM",
+                              "risk_level": "P1",
                               "source_chunks": ["CHUNK_001"]
                             }
                           ]

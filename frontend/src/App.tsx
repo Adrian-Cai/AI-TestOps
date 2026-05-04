@@ -613,7 +613,7 @@ function App() {
               </Col>
               <Col span={8}>
                 <Form.Item label="风险等级" name="riskLevel">
-                  <Select options={["HIGH", "MEDIUM", "LOW"].map((value) => ({ value, label: value }))} />
+                  <Select options={[{ value: "P0", label: "P0 高" }, { value: "P1", label: "P1 中" }, { value: "P2", label: "P2 低" }]} />
                 </Form.Item>
               </Col>
             </Row>
@@ -791,10 +791,10 @@ function App() {
           title="AI 生成"
           extra={
             <Space wrap>
-              <Button icon={<ExperimentOutlined />} loading={busy === "extract"} onClick={extractRequirements}>
+              <Button icon={<ExperimentOutlined />} disabled={busy === "extract"} onClick={extractRequirements}>
                 提取结构化需求
               </Button>
-              <Button type="primary" icon={<RobotOutlined />} loading={busy === "generate"} onClick={generateCases}>
+              <Button type="primary" icon={<RobotOutlined />} disabled={busy === "generate"} onClick={generateCases}>
                 生成测试用例草稿
               </Button>
               <Button icon={<DatabaseOutlined />} onClick={refreshGeneration}>
@@ -1094,8 +1094,9 @@ function StatusTag({ value }: { value?: string }) {
 }
 
 function RiskTag({ value }: { value?: string }) {
-  const color = value === "HIGH" ? "red" : value === "MEDIUM" ? "orange" : value === "LOW" ? "green" : "default";
-  return <Tag color={color}>{value || "-"}</Tag>;
+  const color = value === "P0" ? "red" : value === "P1" ? "orange" : value === "P2" ? "green" : "default";
+  const label = value === "P0" ? "P0 高" : value === "P1" ? "P1 中" : value === "P2" ? "P2 低" : (value || "-");
+  return <Tag color={color}>{label}</Tag>;
 }
 
 function getStepStatus(
@@ -1167,12 +1168,25 @@ function renderJsonTags(value?: string) {
 }
 
 function draftToForm(draft: TestCaseDraftVO) {
+  const normalizeArray = (value?: string): string => {
+    if (!value) return "[]";
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return JSON.stringify(parsed, null, 2);
+      // AI sometimes returns a plain string; wrap it into an array
+      if (typeof parsed === "string") return JSON.stringify([parsed], null, 2);
+      return JSON.stringify([JSON.stringify(parsed)], null, 2);
+    } catch {
+      // raw text without JSON quotes — wrap as single-element array
+      return JSON.stringify([value.trim()], null, 2);
+    }
+  };
   return {
     title: draft.title,
     priority: draft.priority || "P1",
     caseType: draft.caseType || "正常场景",
-    riskLevel: draft.riskLevel || "MEDIUM",
-    preconditionsJson: formatJson(draft.preconditionsJson || "[]"),
+    riskLevel: draft.riskLevel || "P1",
+    preconditionsJson: normalizeArray(draft.preconditionsJson),
     stepsJson: formatJson(draft.stepsJson || "[]"),
     requirementRefsJson: formatJson(draft.requirementRefsJson || "[]"),
     riskTagsJson: formatJson(draft.riskTagsJson || "[]")

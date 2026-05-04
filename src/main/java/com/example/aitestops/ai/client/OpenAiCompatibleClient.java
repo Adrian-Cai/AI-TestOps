@@ -127,7 +127,7 @@ public class OpenAiCompatibleClient implements AiClient {
                         "title", "从文档提取的核心需求",
                         "content", "MOCK 模式下根据输入文档生成的需求摘要，请配置真实模型后获取实际 AI 解析结果。",
                         "priority", "P1",
-                        "risk_level", "MEDIUM",
+                        "risk_level", "P1",
                         "source_chunks", List.of("CHUNK_001")
                 )),
                 "business_rules", List.of(),
@@ -161,7 +161,7 @@ public class OpenAiCompatibleClient implements AiClient {
                         ),
                         "priority", "P1",
                         "case_type", "正常场景",
-                        "risk_level", "HIGH",
+                        "risk_level", "P0",
                         "requirement_refs", List.of("REQ_001"),
                         "risk_tags", List.of("核心链路", "订单提交")
                 ))

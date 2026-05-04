@@ -349,7 +349,7 @@ public class AiTestopsTestCaseDraftServiceImpl
                 2. 根对象必须且只能使用字段 test_cases，test_cases 必须是非空数组。
                 3. test_cases 最多 30 条，每条必须包含 case_id、title、preconditions、steps、priority、case_type、risk_level、requirement_refs、risk_tags。
                 4. steps 必须是非空数组，每个 step 必须包含 step_no、action、expected_result。
-                5. case_type 覆盖 NORMAL、EXCEPTION、BOUNDARY；priority 只能使用 P0、P1、P2、P3；risk_level 只能使用 HIGH、MEDIUM、LOW。
+                5. case_type 覆盖 NORMAL、EXCEPTION、BOUNDARY；priority 只能使用 P0、P1、P2、P3；risk_level 只能使用 P0、P1、P2（分别对应高、中、低）。
                 6. requirement_refs 只引用输入中的 requirement_id。
                 7. title 不超过 80 个中文字符，action 和 expected_result 各不超过 160 个中文字符。
                 输入：
