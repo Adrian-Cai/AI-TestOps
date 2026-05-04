@@ -108,15 +108,34 @@ pipeline {
                             chmod 600 "${ENV_FILE}"
                         fi
 
-                        # 覆写 docker-compose.yml
-                        cat > ${PROJECT_DIR}/docker-compose.yml << 'COMPOSE_EOF'
+                        # 确保 .env 中包含 HOST_PORT（旧版本 .env 可能没有此字段）
+                        if ! grep -q '^HOST_PORT=' "${ENV_FILE}" 2>/dev/null; then
+                            echo "[INFO] 补充 HOST_PORT=8000 到 ${ENV_FILE}"
+                            echo "HOST_PORT=8000" >> "${ENV_FILE}"
+                        fi
+
+                        # 解析宿主机映射端口（优先使用 .env 中的值，默认 8000）
+                        HOST_PORT=\$(grep '^HOST_PORT=' "${ENV_FILE}" | cut -d'=' -f2- | tr -d ' ')
+                        if [ -z "\$HOST_PORT" ] || [ "\$HOST_PORT" = "0" ]; then
+                            HOST_PORT=8000
+                        fi
+
+                        # 检查端口是否已被占用，若占用则自动递增
+                        while ss -tln | grep -q ":\$HOST_PORT "; do
+                            HOST_PORT=\$(echo \$((\$HOST_PORT + 1)))
+                        done
+
+                        echo "[INFO] 使用宿主机端口: \$HOST_PORT"
+
+                        # 覆写 docker-compose.yml，写入解析后的具体端口号
+                        cat > ${PROJECT_DIR}/docker-compose.yml << COMPOSE_EOF
 services:
   ai-testops:
     image: docker.cnb.cool/imacaiy/ai-testops:latest
     container_name: ai-testops
     restart: unless-stopped
     ports:
-      - "${HOST_PORT:-8000}:8080"
+      - "\$HOST_PORT:8080"
     env_file:
       - /opt/ai-testops/.env
     volumes:
@@ -128,7 +147,7 @@ services:
       retries: 3
       start_period: 40s
 COMPOSE_EOF
-                        echo "[INFO] docker-compose.yml 已生成（env_file: /opt/ai-testops/.env）"
+                        echo "[INFO] docker-compose.yml 已生成（port: \$HOST_PORT）"
                     """
                     echo "目录初始化完成"
                 }
@@ -209,7 +228,7 @@ COMPOSE_EOF
                         fi
 
                         # 查找占用 8080 的进程（非 Docker 进程），如 Java 进程残留
-                        PORT_PID=\$(ss -tlnp | awk -F'pid=' '/:8080 /{split(\$2,a," "); print a[1]}' 2>/dev/null || true)
+                        PORT_PID=\$(ss -tlnp | grep ':8080 ' | sed -n 's/.*pid=\\([0-9]*\\).*/\\1/p' 2>/dev/null || true)
                         if [ -n "\$PORT_PID" ]; then
                             echo "发现进程 \$PORT_PID 占用 8080 端口，尝试终止..."
                             kill -15 \$PORT_PID 2>/dev/null || kill -9 \$PORT_PID 2>/dev/null || true
