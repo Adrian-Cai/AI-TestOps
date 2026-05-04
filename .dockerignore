@@ -1,7 +1,6 @@
 node_modules
 .git
 .gitignore
-.mvn
 target
 *.md
 .DS_Store
@@ -9,5 +8,3 @@ docs
 scripts
 .env*
 package-lock.json
-mvnw
-mvnw.cmd
