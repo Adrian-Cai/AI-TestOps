@@ -209,7 +209,7 @@ COMPOSE_EOF
                         fi
 
                         # 查找占用 8080 的进程（非 Docker 进程），如 Java 进程残留
-                        PORT_PID=\$(ss -tlnp | grep ':8080 ' | grep -oP 'pid=\K\d+' 2>/dev/null || true)
+                        PORT_PID=\$(ss -tlnp | awk -F'pid=' '/:8080 /{split(\$2,a," "); print a[1]}' 2>/dev/null || true)
                         if [ -n "\$PORT_PID" ]; then
                             echo "发现进程 \$PORT_PID 占用 8080 端口，尝试终止..."
                             kill -15 \$PORT_PID 2>/dev/null || kill -9 \$PORT_PID 2>/dev/null || true
