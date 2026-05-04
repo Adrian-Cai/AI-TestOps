@@ -1,32 +1,60 @@
+# Java / Maven
 target/
-.mvn/wrapper/apache-maven-*/
-.mvn/wrapper/apache-maven-*.zip
-.mvn/wrapper/apache-maven-*.tar.gz
-data/
-logs/
-*.log
-.idea/
+*.class
+*.jar
+*.war
+*.ear
 *.iml
 .classpath
 .project
 .settings/
-.DS_Store
-*.swp
-*.swo
-*.bak
-*.tmp
-*.log
-*.out
-*.err
+.mvn/wrapper/apache-maven-*/
+.mvn/wrapper/apache-maven-*.zip
+.mvn/wrapper/apache-maven-*.tar.gz
+
+# Spring Boot
+spring-boot-devtools.properties
+application-local.yml
+application-local.properties
+
+# Node.js / Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Environment & Secrets
 .env
 *.env.local
 *.env.development
 *.env.test
 *.env.production
+
+# Logs & Data
+logs/
+data/
+*.log
+*.out
+*.err
+
+# OS
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# IDE
+.idea/
 .vscode/
-.mvn/*
-.vscode/*
+*.swp
+*.swo
+*.bak
+*.tmp
+
+# AI Tools
+.claude/
+.cursor/
+.cursorrules
+.openai-keys.json
+
+# Lint / Misc
 .markdownlint.json
-*.md
-frontend/node_modules/
-frontend/dist/
