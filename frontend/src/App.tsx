@@ -351,10 +351,20 @@ function App() {
   const saveDraft = async () => {
     if (!editingDraft) return;
     const values = await draftForm.validateFields();
+    const normalizeToArray = (jsonStr: string) => {
+      try {
+        const parsed = JSON.parse(jsonStr);
+        if (Array.isArray(parsed)) return jsonStr;
+        if (typeof parsed === "string") return JSON.stringify([parsed]);
+        return jsonStr;
+      } catch {
+        return JSON.stringify([jsonStr.trim()]);
+      }
+    };
     const data = await runAction("save-draft", "保存草稿编辑", () =>
       api.updateDraft(editingDraft.draftCaseId, {
         title: values.title,
-        preconditionsJson: values.preconditionsJson,
+        preconditionsJson: normalizeToArray(values.preconditionsJson),
         stepsJson: values.stepsJson,
         priority: values.priority,
         caseType: values.caseType,
@@ -1198,6 +1208,9 @@ function jsonArrayRule(label: string) {
     validator: (_: unknown, value: string) => {
       try {
         const parsed = JSON.parse(value || "[]");
+        if (typeof parsed === "string" && parsed.trim()) {
+          return Promise.resolve();
+        }
         if (!Array.isArray(parsed) || parsed.length === 0) {
           return Promise.reject(new Error(`${label}必须是非空 JSON 数组`));
         }
