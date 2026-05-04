@@ -1,3 +1,4 @@
+
 pipeline {
     agent any
 
@@ -210,8 +211,6 @@ COMPOSE_EOF
                 script {
                     echo "停止旧容器并释放端口..."
                     sh """
-                        set -e
-
                         echo "1) 停止 docker compose 管理的服务..."
                         cd ${PROJECT_DIR}
                         docker compose down --remove-orphans || true
@@ -219,23 +218,34 @@ COMPOSE_EOF
                         echo "2) 强制删除可能残留的同名容器..."
                         docker rm -f ai-testops 2>/dev/null || true
 
-                        echo "3) 检查并释放 8080 端口..."
-                        # 查找占用 8080 端口的容器并强制删除
-                        PORT_CONTAINER=\$(docker ps -q --filter "publish=8080" 2>/dev/null || true)
+                        # 读取宿主机映射端口
+                        HOST_PORT=\$(grep '^HOST_PORT=' "${ENV_FILE}" | cut -d'=' -f2- | tr -d ' ')
+                        if [ -z "\$HOST_PORT" ] || [ "\$HOST_PORT" = "0" ]; then
+                            HOST_PORT=8000
+                        fi
+
+                        echo "3) 检查并释放宿主机端口 \$HOST_PORT..."
+
+                        # 查找占用该端口的容器（通过 docker ps 的 publish 过滤）
+                        PORT_CONTAINER=\$(docker ps -q --filter "publish=\$HOST_PORT" 2>/dev/null || true)
                         if [ -n "\$PORT_CONTAINER" ]; then
-                            echo "发现其他容器占用 8080 端口，强制删除: \$PORT_CONTAINER"
+                            echo "发现其他容器占用端口 \$HOST_PORT，强制删除: \$PORT_CONTAINER"
                             docker rm -f \$PORT_CONTAINER 2>/dev/null || true
+                        else
+                            echo "未发现其他容器占用端口 \$HOST_PORT"
                         fi
 
-                        # 查找占用 8080 的进程（非 Docker 进程），如 Java 进程残留
-                        PORT_PID=\$(ss -tlnp | grep ':8080 ' | sed -n 's/.*pid=\\([0-9]*\\).*/\\1/p' 2>/dev/null || true)
+                        # 检查是否有非 Docker 进程占用此端口，仅警告不 kill（避免误杀 Jenkins 等关键服务）
+                        PORT_PID=\$(ss -tlnp | grep ":\$HOST_PORT " | sed -n 's/.*pid=\\([0-9]*\\).*/\\1/p' 2>/dev/null || true)
                         if [ -n "\$PORT_PID" ]; then
-                            echo "发现进程 \$PORT_PID 占用 8080 端口，尝试终止..."
-                            kill -15 \$PORT_PID 2>/dev/null || kill -9 \$PORT_PID 2>/dev/null || true
-                            sleep 1
+                            echo "[WARN] 发现非 Docker 进程 PID=\$PORT_PID 占用宿主机端口 \$HOST_PORT"
+                            echo "[WARN] 为保护服务器稳定，不会自动终止该进程。请检查是否为预期服务。"
+                            echo "[WARN] 如需释放该端口，请手动处理：kill \$PORT_PID 或修改 .env 中 HOST_PORT 使用其他端口"
+                        else
+                            echo "端口 \$HOST_PORT 已空闲，可以绑定"
                         fi
 
-                        echo "端口释放完成"
+                        echo "端口检查完成"
                     """
                 }
             }
