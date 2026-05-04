@@ -51,6 +51,7 @@ import {
 } from "@ant-design/icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
+import { normalizeArray, jsonArrayRule } from "./utils";
 import type {
   DocumentChunkVO,
   DocumentParseSummaryVO,
@@ -351,26 +352,16 @@ function App() {
   const saveDraft = async () => {
     if (!editingDraft) return;
     const values = await draftForm.validateFields();
-    const normalizeToArray = (jsonStr: string) => {
-      try {
-        const parsed = JSON.parse(jsonStr);
-        if (Array.isArray(parsed)) return jsonStr;
-        if (typeof parsed === "string") return JSON.stringify([parsed]);
-        return jsonStr;
-      } catch {
-        return JSON.stringify([jsonStr.trim()]);
-      }
-    };
     const data = await runAction("save-draft", "保存草稿编辑", () =>
       api.updateDraft(editingDraft.draftCaseId, {
         title: values.title,
-        preconditionsJson: normalizeToArray(values.preconditionsJson),
-        stepsJson: values.stepsJson,
+        preconditionsJson: normalizeArray(values.preconditionsJson),
+        stepsJson: normalizeArray(values.stepsJson),
         priority: values.priority,
         caseType: values.caseType,
         riskLevel: values.riskLevel,
-        requirementRefsJson: values.requirementRefsJson,
-        riskTagsJson: values.riskTagsJson,
+        requirementRefsJson: normalizeArray(values.requirementRefsJson),
+        riskTagsJson: normalizeArray(values.riskTagsJson),
         reviewer: "manual_user"
       })
     );
@@ -1178,19 +1169,6 @@ function renderJsonTags(value?: string) {
 }
 
 function draftToForm(draft: TestCaseDraftVO) {
-  const normalizeArray = (value?: string): string => {
-    if (!value) return "[]";
-    try {
-      const parsed = JSON.parse(value);
-      if (Array.isArray(parsed)) return JSON.stringify(parsed, null, 2);
-      // AI sometimes returns a plain string; wrap it into an array
-      if (typeof parsed === "string") return JSON.stringify([parsed], null, 2);
-      return JSON.stringify([JSON.stringify(parsed)], null, 2);
-    } catch {
-      // raw text without JSON quotes — wrap as single-element array
-      return JSON.stringify([value.trim()], null, 2);
-    }
-  };
   return {
     title: draft.title,
     priority: draft.priority || "P1",
@@ -1198,27 +1176,8 @@ function draftToForm(draft: TestCaseDraftVO) {
     riskLevel: draft.riskLevel || "P1",
     preconditionsJson: normalizeArray(draft.preconditionsJson),
     stepsJson: formatJson(draft.stepsJson || "[]"),
-    requirementRefsJson: formatJson(draft.requirementRefsJson || "[]"),
-    riskTagsJson: formatJson(draft.riskTagsJson || "[]")
-  };
-}
-
-function jsonArrayRule(label: string) {
-  return {
-    validator: (_: unknown, value: string) => {
-      try {
-        const parsed = JSON.parse(value || "[]");
-        if (typeof parsed === "string" && parsed.trim()) {
-          return Promise.resolve();
-        }
-        if (!Array.isArray(parsed) || parsed.length === 0) {
-          return Promise.reject(new Error(`${label}必须是非空 JSON 数组`));
-        }
-        return Promise.resolve();
-      } catch (error) {
-        return Promise.reject(new Error(`${label}不是合法 JSON`));
-      }
-    }
+    requirementRefsJson: normalizeArray(draft.requirementRefsJson),
+    riskTagsJson: normalizeArray(draft.riskTagsJson)
   };
 }
 
