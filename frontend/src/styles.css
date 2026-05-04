@@ -18,6 +18,8 @@ body {
 .app-shell {
   min-height: 100vh;
   background: #f8fafc;
+  display: flex;
+  flex-direction: column;
 }
 
 .app-header {
@@ -304,5 +306,65 @@ body {
 
   .ant-card-body {
     padding: 14px !important;
+  }
+}
+
+/* Footer */
+.app-footer {
+  background: #ffffff;
+  border-top: 1px solid #e5e7eb;
+  padding: 16px 24px;
+  margin-top: auto;
+}
+
+.footer-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.footer-section {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.footer-label {
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.footer-section a {
+  color: #111827;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.footer-section a:hover {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+.footer-divider {
+  width: 1px;
+  height: 16px;
+  background: #e5e7eb;
+}
+
+@media (max-width: 768px) {
+  .app-footer {
+    padding: 12px 16px;
+  }
+
+  .footer-content {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .footer-divider {
+    width: 80px;
+    height: 1px;
   }
 }

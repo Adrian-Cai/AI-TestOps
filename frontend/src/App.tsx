@@ -557,6 +557,20 @@ function App() {
         </Content>
       </Layout>
 
+      <footer className="app-footer">
+        <div className="footer-content">
+          <div className="footer-section">
+            <span className="footer-label">自动化测试平台</span>
+            <a href="https://autotest.wiac.xyz/" target="_blank" rel="noopener noreferrer">https://autotest.wiac.xyz/</a>
+          </div>
+          <div className="footer-divider" />
+          <div className="footer-section">
+            <span className="footer-label">GitHub</span>
+            <a href="https://github.com/acai1998/AI-TestOps" target="_blank" rel="noopener noreferrer">https://github.com/acai1998/AI-TestOps</a>
+          </div>
+        </div>
+      </footer>
+
       <Drawer
         title="编辑测试用例草稿"
         width={560}
