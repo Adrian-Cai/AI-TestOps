@@ -116,7 +116,7 @@ services:
     container_name: ai-testops
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "${HOST_PORT:-8000}:8080"
     env_file:
       - /opt/ai-testops/.env
     volumes:
@@ -189,10 +189,34 @@ COMPOSE_EOF
         stage('停止旧容器') {
             steps {
                 script {
-                    echo "停止旧容器..."
+                    echo "停止旧容器并释放端口..."
                     sh """
+                        set -e
+
+                        echo "1) 停止 docker compose 管理的服务..."
                         cd ${PROJECT_DIR}
-                        docker compose down || true
+                        docker compose down --remove-orphans || true
+
+                        echo "2) 强制删除可能残留的同名容器..."
+                        docker rm -f ai-testops 2>/dev/null || true
+
+                        echo "3) 检查并释放 8080 端口..."
+                        # 查找占用 8080 端口的容器并强制删除
+                        PORT_CONTAINER=\$(docker ps -q --filter "publish=8080" 2>/dev/null || true)
+                        if [ -n "\$PORT_CONTAINER" ]; then
+                            echo "发现其他容器占用 8080 端口，强制删除: \$PORT_CONTAINER"
+                            docker rm -f \$PORT_CONTAINER 2>/dev/null || true
+                        fi
+
+                        # 查找占用 8080 的进程（非 Docker 进程），如 Java 进程残留
+                        PORT_PID=\$(ss -tlnp | grep ':8080 ' | grep -oP 'pid=\K\d+' 2>/dev/null || true)
+                        if [ -n "\$PORT_PID" ]; then
+                            echo "发现进程 \$PORT_PID 占用 8080 端口，尝试终止..."
+                            kill -15 \$PORT_PID 2>/dev/null || kill -9 \$PORT_PID 2>/dev/null || true
+                            sleep 1
+                        fi
+
+                        echo "端口释放完成"
                     """
                 }
             }
@@ -297,11 +321,20 @@ COMPOSE_EOF
     post {
         success {
             script {
+                # 清理备份文件（部署成功不再需要）
+                sh """
+                    rm -f ${PROJECT_DIR}/docker-compose.yml.backup 2>/dev/null || true
+                """
+
+                def host_port = sh(
+                    script: "grep '^HOST_PORT=' ${ENV_FILE} 2>/dev/null | cut -d'=' -f2- || echo '8000'",
+                    returnStdout: true
+                ).trim()
                 def domain = sh(
                     script: "grep '^DOMAIN=' ${ENV_FILE} 2>/dev/null | cut -d'=' -f2- || echo ''",
                     returnStdout: true
                 ).trim()
-                def accessUrl = domain ? "http://\${domain}" : "http://\${SERVER_IP}:8080"
+                def accessUrl = domain ? "http://\${domain}" : "http://\${SERVER_IP}:${host_port}"
 
                 echo ""
                 echo "========================================"
@@ -335,9 +368,12 @@ COMPOSE_EOF
                     if [ -f ${PROJECT_DIR}/docker-compose.yml.backup ]; then
                         cd ${PROJECT_DIR}
                         mv docker-compose.yml.backup docker-compose.yml
-                        docker compose down || true
+                        docker compose down --remove-orphans || true
+                        docker rm -f ai-testops 2>/dev/null || true
                         docker compose up -d || true
                         echo "回滚完成"
+                        # 清理备份文件
+                        rm -f docker-compose.yml.backup 2>/dev/null || true
                     else
                         echo "未找到备份配置，跳过回滚"
                     fi
@@ -348,7 +384,6 @@ COMPOSE_EOF
         always {
             script {
                 sh """
-                    rm -f ${PROJECT_DIR}/docker-compose.yml.backup 2>/dev/null || true
                     docker logout docker.cnb.cool 2>/dev/null || true
                 """
                 cleanWs()
