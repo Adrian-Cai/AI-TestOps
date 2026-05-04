@@ -321,7 +321,7 @@ COMPOSE_EOF
     post {
         success {
             script {
-                # 清理备份文件（部署成功不再需要）
+                // 清理备份文件（部署成功不再需要）
                 sh """
                     rm -f ${PROJECT_DIR}/docker-compose.yml.backup 2>/dev/null || true
                 """
