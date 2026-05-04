@@ -111,14 +111,14 @@ pipeline {
 
                         # 确保 .env 中包含 HOST_PORT（旧版本 .env 可能没有此字段）
                         if ! grep -q '^HOST_PORT=' "${ENV_FILE}" 2>/dev/null; then
-                            echo "[INFO] 补充 HOST_PORT=8000 到 ${ENV_FILE}"
-                            echo "HOST_PORT=8000" >> "${ENV_FILE}"
+                            echo "[INFO] 补充 HOST_PORT=18888 到 ${ENV_FILE}"
+                            echo "HOST_PORT=18888" >> "${ENV_FILE}"
                         fi
 
-                        # 解析宿主机映射端口（优先使用 .env 中的值，默认 8000）
+                        # 解析宿主机映射端口（优先使用 .env 中的值，默认 18888）
                         HOST_PORT=\$(grep '^HOST_PORT=' "${ENV_FILE}" | cut -d'=' -f2- | tr -d ' ')
                         if [ -z "\$HOST_PORT" ] || [ "\$HOST_PORT" = "0" ]; then
-                            HOST_PORT=8000
+                            HOST_PORT=18888
                         fi
 
                         # 检查端口是否已被占用，若占用则自动递增
@@ -292,7 +292,7 @@ COMPOSE_EOF
 
                     // 使用与 docker-compose 一致的宿主机映射端口进行外部健康检查
                     def host_port = sh(
-                        script: "grep '^HOST_PORT=' ${ENV_FILE} | cut -d'=' -f2- || echo '8000'",
+                        script: "grep '^HOST_PORT=' ${ENV_FILE} | cut -d'=' -f2- || echo '18888'",
                         returnStdout: true
                     ).trim()
 
@@ -364,7 +364,7 @@ COMPOSE_EOF
                 """
 
                 def host_port = sh(
-                    script: "grep '^HOST_PORT=' ${ENV_FILE} 2>/dev/null | cut -d'=' -f2- || echo '8000'",
+                    script: "grep '^HOST_PORT=' ${ENV_FILE} 2>/dev/null | cut -d'=' -f2- || echo '18888'",
                     returnStdout: true
                 ).trim()
                 def domain = sh(
