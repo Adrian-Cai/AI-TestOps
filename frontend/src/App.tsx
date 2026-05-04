@@ -540,7 +540,7 @@ function App() {
               </Card>
               {renderMetricStrip()}
 
-              <Spin spinning={Boolean(busy)} tip={loadingText(busy)}>
+              <Spin spinning={busy !== null && busy !== "extract" && busy !== "generate"} tip={loadingText(busy)}>
                 {currentStep === "input" && renderInputStep()}
                 {currentStep === "parse" && renderParseStep()}
                 {currentStep === "generate" && renderGenerateStep()}
