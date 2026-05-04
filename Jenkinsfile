@@ -290,10 +290,18 @@ COMPOSE_EOF
                 script {
                     echo "执行健康检查..."
 
+                    // 使用与 docker-compose 一致的宿主机映射端口进行外部健康检查
+                    def host_port = sh(
+                        script: "grep '^HOST_PORT=' ${ENV_FILE} | cut -d'=' -f2- || echo '8000'",
+                        returnStdout: true
+                    ).trim()
+
+                    echo "健康检查地址: http://localhost:${host_port}/"
+
                     retry(10) {
                         sleep 5
                         sh """
-                            curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/ | grep -q 200 || exit 1
+                            curl -s -o /dev/null -w "%{http_code}" --max-time 10 http://localhost:${host_port}/ | grep -qE '^[23]' || exit 1
                         """
                     }
 

@@ -47,9 +47,9 @@ RUN apk add --no-cache tzdata && \
 # 从构建阶段复制 JAR
 COPY --from=backend-builder /app/target/*.jar app.jar
 
-# 健康检查
-HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health || exit 1
+# 健康检查（使用根路径，项目未引入 actuator）
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/ || exit 1
 
 EXPOSE 8080
 
