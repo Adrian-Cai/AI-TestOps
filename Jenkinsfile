@@ -1,6 +1,7 @@
 
 pipeline {
-    agent any
+    // 部署任务必须在主节点（Jenkins Master）执行，不要跑到测试节点
+    agent { label 'built-in' }
 
     environment {
         IMAGE_NAME  = "docker.cnb.cool/imacaiy/ai-testops"
@@ -67,6 +68,23 @@ pipeline {
                     } else {
                         env.IMAGE_TAG = params.IMAGE_TAG
                     }
+
+                    // 检测 docker compose 命令格式（兼容新旧 Docker 版本）
+                    env.COMPOSE_CMD = sh(
+                        script: '''
+                            if docker compose version &>/dev/null 2>&1; then
+                                echo "docker compose"
+                            elif command -v docker-compose &>/dev/null; then
+                                echo "docker-compose"
+                            else
+                                echo "ERROR: 未找到 docker-compose，请安装 docker-compose 插件" >&2
+                                exit 1
+                            fi
+                        ''',
+                        returnStdout: true
+                    ).trim()
+
+                    echo "Docker Compose 命令: ${env.COMPOSE_CMD}"
                 }
             }
         }
@@ -75,10 +93,10 @@ pipeline {
             steps {
                 script {
                     echo "检查服务器环境..."
-                    sh '''
+                    sh """
                         docker --version
-                        docker compose version
-                    '''
+                        ${COMPOSE_CMD} --version
+                    """
                     sh """
                         if [ ! -d "${PROJECT_DIR}" ]; then
                             echo "警告: 项目目录不存在: ${PROJECT_DIR}，将在下一步自动创建"
@@ -115,20 +133,18 @@ pipeline {
                             echo "HOST_PORT=18888" >> "${ENV_FILE}"
                         fi
 
-                        # 解析宿主机映射端口（优先使用 .env 中的值，默认 18888）
-                        HOST_PORT=\$(grep '^HOST_PORT=' "${ENV_FILE}" | cut -d'=' -f2- | tr -d ' ')
-                        if [ -z "\$HOST_PORT" ] || [ "\$HOST_PORT" = "0" ]; then
-                            HOST_PORT=18888
-                        fi
+                        # 使用固定端口 18888
+                        HOST_PORT=18888
 
-                        # 检查端口是否已被占用，若占用则自动递增
-                        while ss -tln | grep -q ":\$HOST_PORT "; do
-                            HOST_PORT=\$(echo \$((\$HOST_PORT + 1)))
-                        done
+                        # 检查端口是否已被占用
+                        if ss -tln | grep -q ":\$HOST_PORT "; then
+                            echo "[ERROR] 端口 \$HOST_PORT 已被占用，请先释放该端口或停止占用进程"
+                            exit 1
+                        fi
 
                         echo "[INFO] 使用宿主机端口: \$HOST_PORT"
 
-                        # 覆写 docker-compose.yml，写入解析后的具体端口号
+                        # 覆写 docker-compose.yml
                         cat > ${PROJECT_DIR}/docker-compose.yml << COMPOSE_EOF
 services:
   ai-testops:
@@ -213,34 +229,21 @@ COMPOSE_EOF
                     sh """
                         echo "1) 停止 docker compose 管理的服务..."
                         cd ${PROJECT_DIR}
-                        docker compose down --remove-orphans || true
+                        ${COMPOSE_CMD} down --remove-orphans || true
 
                         echo "2) 强制删除可能残留的同名容器..."
                         docker rm -f ai-testops 2>/dev/null || true
 
-                        # 读取宿主机映射端口
-                        HOST_PORT=\$(grep '^HOST_PORT=' "${ENV_FILE}" | cut -d'=' -f2- | tr -d ' ')
-                        if [ -z "\$HOST_PORT" ] || [ "\$HOST_PORT" = "0" ]; then
-                            HOST_PORT=8000
-                        fi
+                        # 使用固定端口
+                        HOST_PORT=18888
 
-                        echo "3) 检查并释放宿主机端口 \$HOST_PORT..."
+                        echo "3) 检查宿主机端口 \$HOST_PORT..."
 
-                        # 查找占用该端口的容器（通过 docker ps 的 publish 过滤）
-                        PORT_CONTAINER=\$(docker ps -q --filter "publish=\$HOST_PORT" 2>/dev/null || true)
-                        if [ -n "\$PORT_CONTAINER" ]; then
-                            echo "发现其他容器占用端口 \$HOST_PORT，强制删除: \$PORT_CONTAINER"
-                            docker rm -f \$PORT_CONTAINER 2>/dev/null || true
-                        else
-                            echo "未发现其他容器占用端口 \$HOST_PORT"
-                        fi
-
-                        # 检查是否有非 Docker 进程占用此端口，仅警告不 kill（避免误杀 Jenkins 等关键服务）
+                        # 检查是否有非 Docker 进程占用此端口
                         PORT_PID=\$(ss -tlnp | grep ":\$HOST_PORT " | sed -n 's/.*pid=\\([0-9]*\\).*/\\1/p' 2>/dev/null || true)
                         if [ -n "\$PORT_PID" ]; then
-                            echo "[WARN] 发现非 Docker 进程 PID=\$PORT_PID 占用宿主机端口 \$HOST_PORT"
-                            echo "[WARN] 为保护服务器稳定，不会自动终止该进程。请检查是否为预期服务。"
-                            echo "[WARN] 如需释放该端口，请手动处理：kill \$PORT_PID 或修改 .env 中 HOST_PORT 使用其他端口"
+                            echo "[ERROR] 非 Docker 进程 PID=\$PORT_PID 占用宿主机端口 \$HOST_PORT，请手动处理后重试"
+                            exit 1
                         else
                             echo "端口 \$HOST_PORT 已空闲，可以绑定"
                         fi
@@ -277,9 +280,9 @@ COMPOSE_EOF
                     echo "启动新容器..."
                     sh """
                         cd ${PROJECT_DIR}
-                        docker compose up -d
+                        ${COMPOSE_CMD} up -d
 
-                        docker compose ps
+                        ${COMPOSE_CMD} ps
                     """
                 }
             }
@@ -289,13 +292,7 @@ COMPOSE_EOF
             steps {
                 script {
                     echo "执行健康检查..."
-
-                    // 使用与 docker-compose 一致的宿主机映射端口进行外部健康检查
-                    def host_port = sh(
-                        script: "grep '^HOST_PORT=' ${ENV_FILE} | cut -d'=' -f2- || echo '18888'",
-                        returnStdout: true
-                    ).trim()
-
+                    def host_port = "18888"
                     echo "健康检查地址: http://localhost:${host_port}/"
 
                     retry(10) {
@@ -363,10 +360,7 @@ COMPOSE_EOF
                     rm -f ${PROJECT_DIR}/docker-compose.yml.backup 2>/dev/null || true
                 """
 
-                def host_port = sh(
-                    script: "grep '^HOST_PORT=' ${ENV_FILE} 2>/dev/null | cut -d'=' -f2- || echo '18888'",
-                    returnStdout: true
-                ).trim()
+                def host_port = "18888"
                 def domain = sh(
                     script: "grep '^DOMAIN=' ${ENV_FILE} 2>/dev/null | cut -d'=' -f2- || echo ''",
                     returnStdout: true
@@ -380,7 +374,7 @@ COMPOSE_EOF
                 echo ""
                 echo "访问地址: ${accessUrl}"
                 echo "容器状态: docker ps | grep ai-testops"
-                echo "查看日志: cd ${PROJECT_DIR} && docker compose logs -f"
+                echo "查看日志: cd ${PROJECT_DIR} && ${COMPOSE_CMD} logs -f"
                 echo ""
                 echo "========================================"
             }
@@ -396,7 +390,7 @@ COMPOSE_EOF
 
                 sh """
                     cd ${PROJECT_DIR} 2>/dev/null || true
-                    docker compose logs --tail=100 2>/dev/null || true
+                    ${COMPOSE_CMD} logs --tail=100 2>/dev/null || true
                 """
 
                 echo ""
@@ -405,9 +399,9 @@ COMPOSE_EOF
                     if [ -f ${PROJECT_DIR}/docker-compose.yml.backup ]; then
                         cd ${PROJECT_DIR}
                         mv docker-compose.yml.backup docker-compose.yml
-                        docker compose down --remove-orphans || true
+                        ${COMPOSE_CMD} down --remove-orphans || true
                         docker rm -f ai-testops 2>/dev/null || true
-                        docker compose up -d || true
+                        ${COMPOSE_CMD} up -d || true
                         echo "回滚完成"
                         # 清理备份文件
                         rm -f docker-compose.yml.backup 2>/dev/null || true
