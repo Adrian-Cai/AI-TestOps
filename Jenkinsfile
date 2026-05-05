@@ -67,6 +67,23 @@ pipeline {
                     } else {
                         env.IMAGE_TAG = params.IMAGE_TAG
                     }
+
+                    // 检测 docker compose 命令格式（兼容新旧 Docker 版本）
+                    env.COMPOSE_CMD = sh(
+                        script: '''
+                            if docker compose version &>/dev/null 2>&1; then
+                                echo "docker compose"
+                            elif command -v docker-compose &>/dev/null; then
+                                echo "docker-compose"
+                            else
+                                echo "ERROR: 未找到 docker-compose，请安装 docker-compose 插件" >&2
+                                exit 1
+                            fi
+                        ''',
+                        returnStdout: true
+                    ).trim()
+
+                    echo "Docker Compose 命令: ${env.COMPOSE_CMD}"
                 }
             }
         }
@@ -75,10 +92,10 @@ pipeline {
             steps {
                 script {
                     echo "检查服务器环境..."
-                    sh '''
+                    sh """
                         docker --version
-                        docker compose version
-                    '''
+                        ${COMPOSE_CMD} --version
+                    """
                     sh """
                         if [ ! -d "${PROJECT_DIR}" ]; then
                             echo "警告: 项目目录不存在: ${PROJECT_DIR}，将在下一步自动创建"
@@ -211,7 +228,7 @@ COMPOSE_EOF
                     sh """
                         echo "1) 停止 docker compose 管理的服务..."
                         cd ${PROJECT_DIR}
-                        docker compose down --remove-orphans || true
+                        ${COMPOSE_CMD} down --remove-orphans || true
 
                         echo "2) 强制删除可能残留的同名容器..."
                         docker rm -f ai-testops 2>/dev/null || true
@@ -262,9 +279,9 @@ COMPOSE_EOF
                     echo "启动新容器..."
                     sh """
                         cd ${PROJECT_DIR}
-                        docker compose up -d
+                        ${COMPOSE_CMD} up -d
 
-                        docker compose ps
+                        ${COMPOSE_CMD} ps
                     """
                 }
             }
@@ -356,7 +373,7 @@ COMPOSE_EOF
                 echo ""
                 echo "访问地址: ${accessUrl}"
                 echo "容器状态: docker ps | grep ai-testops"
-                echo "查看日志: cd ${PROJECT_DIR} && docker compose logs -f"
+                echo "查看日志: cd ${PROJECT_DIR} && ${COMPOSE_CMD} logs -f"
                 echo ""
                 echo "========================================"
             }
@@ -372,7 +389,7 @@ COMPOSE_EOF
 
                 sh """
                     cd ${PROJECT_DIR} 2>/dev/null || true
-                    docker compose logs --tail=100 2>/dev/null || true
+                    ${COMPOSE_CMD} logs --tail=100 2>/dev/null || true
                 """
 
                 echo ""
@@ -381,9 +398,9 @@ COMPOSE_EOF
                     if [ -f ${PROJECT_DIR}/docker-compose.yml.backup ]; then
                         cd ${PROJECT_DIR}
                         mv docker-compose.yml.backup docker-compose.yml
-                        docker compose down --remove-orphans || true
+                        ${COMPOSE_CMD} down --remove-orphans || true
                         docker rm -f ai-testops 2>/dev/null || true
-                        docker compose up -d || true
+                        ${COMPOSE_CMD} up -d || true
                         echo "回滚完成"
                         # 清理备份文件
                         rm -f docker-compose.yml.backup 2>/dev/null || true
