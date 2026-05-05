@@ -648,11 +648,24 @@ public class AiTestopsTestCaseDraftServiceImpl
         if (!StringUtils.hasText(draft.getPriority())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "测试用例优先级不能为空");
         }
-        validateJsonArray(draft.getStepsJson(), "stepsJson");
+        validateNonEmptyJsonArray(draft.getStepsJson(), "stepsJson");
         validateJsonArray(draft.getRequirementRefsJson(), "requirementRefsJson");
     }
 
     private void validateJsonArray(String json, String fieldName) {
+        try {
+            JsonNode node = objectMapper.readTree(json);
+            if (!node.isArray()) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST, fieldName + " 必须是 JSON 数组");
+            }
+        } catch (BusinessException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, fieldName + " 不是合法 JSON: " + ex.getMessage(), ex);
+        }
+    }
+
+    private void validateNonEmptyJsonArray(String json, String fieldName) {
         try {
             JsonNode node = objectMapper.readTree(json);
             if (!node.isArray() || node.isEmpty()) {
