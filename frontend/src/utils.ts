@@ -29,28 +29,34 @@ export function getDefaultCaseTypeForRiskLevel(riskLevel?: string | null): strin
   return "正常场景";
 }
 
+const CASE_TYPE_LABELS: Record<string, string> = {
+  NORMAL: "正常场景",
+  EXCEPTION: "异常场景",
+  BOUNDARY: "边界场景",
+  PERMISSION: "权限场景",
+  STATUS_FLOW: "状态流转场景",
+  API_VALIDATION: "接口校验场景"
+};
+
+export const CASE_TYPE_OPTIONS = Object.values(CASE_TYPE_LABELS).map((value) => ({
+  value,
+  label: value
+}));
+
+function normalizeCaseTypeKey(caseType: string): string {
+  return caseType.trim().replace(/[\s-]+/g, "_").toUpperCase();
+}
+
 /**
  * Map English case type to Chinese display name.
  */
 export function formatCaseType(caseType?: string | null): string {
   if (!caseType) return "-";
 
-  const typeMap: Record<string, string> = {
-    "NORMAL": "正常场景",
-    "正常场景": "正常场景",
-    "EXCEPTION": "异常场景",
-    "异常场景": "异常场景",
-    "BOUNDARY": "边界场景",
-    "边界场景": "边界场景",
-    "PERMISSION": "权限场景",
-    "权限场景": "权限场景",
-    "STATUS_FLOW": "状态流转场景",
-    "状态流转场景": "状态流转场景",
-    "API_VALIDATION": "接口校验场景",
-    "接口校验场景": "接口校验场景"
-  };
+  const trimmed = caseType.trim();
+  if (!trimmed) return "-";
 
-  return typeMap[caseType] || caseType;
+  return CASE_TYPE_LABELS[normalizeCaseTypeKey(trimmed)] || trimmed;
 }
 
 /**
@@ -59,16 +65,13 @@ export function formatCaseType(caseType?: string | null): string {
 export function toEnglishCaseType(caseType?: string | null): string | undefined {
   if (!caseType) return undefined;
 
-  const typeMap: Record<string, string> = {
-    "正常场景": "NORMAL",
-    "异常场景": "EXCEPTION",
-    "边界场景": "BOUNDARY",
-    "权限场景": "PERMISSION",
-    "状态流转场景": "STATUS_FLOW",
-    "接口校验场景": "API_VALIDATION"
-  };
+  const trimmed = caseType.trim();
+  if (!trimmed) return undefined;
 
-  return typeMap[caseType] || caseType;
+  const chineseToEnglish = Object.fromEntries(Object.entries(CASE_TYPE_LABELS).map(([key, value]) => [value, key]));
+  const normalized = normalizeCaseTypeKey(trimmed);
+
+  return chineseToEnglish[trimmed] || (CASE_TYPE_LABELS[normalized] ? normalized : trimmed);
 }
 
 /**

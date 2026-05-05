@@ -51,7 +51,14 @@ import {
 } from "@ant-design/icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
-import { normalizeArray, jsonArrayRule, getDefaultCaseTypeForRiskLevel, formatCaseType, toEnglishCaseType } from "./utils";
+import {
+  CASE_TYPE_OPTIONS,
+  normalizeArray,
+  jsonArrayRule,
+  getDefaultCaseTypeForRiskLevel,
+  formatCaseType,
+  toEnglishCaseType
+} from "./utils";
 import type {
   DocumentChunkVO,
   DocumentParseSummaryVO,
@@ -352,14 +359,16 @@ function App() {
   const saveDraft = async () => {
     if (!editingDraft) return;
     const values = await draftForm.validateFields();
+    const riskLevel = values.riskLevel || editingDraft.riskLevel || "P1";
+    const caseType = toEnglishCaseType(values.caseType) || toEnglishCaseType(getDefaultCaseTypeForRiskLevel(riskLevel)) || "NORMAL";
     const data = await runAction("save-draft", "保存草稿编辑", () =>
       api.updateDraft(editingDraft.draftCaseId, {
         title: values.title,
         preconditionsJson: normalizeArray(values.preconditionsJson),
         stepsJson: normalizeArray(values.stepsJson),
         priority: values.priority,
-        caseType: toEnglishCaseType(values.caseType),
-        riskLevel: values.riskLevel,
+        caseType,
+        riskLevel,
         requirementRefsJson: normalizeArray(values.requirementRefsJson),
         riskTagsJson: normalizeArray(values.riskTagsJson),
         reviewer: "manual_user"
@@ -609,17 +618,12 @@ function App() {
               </Col>
               <Col span={8}>
                 <Form.Item label="类型" name="caseType">
-                  <Select
-                    options={["正常场景", "异常场景", "边界场景", "权限场景", "状态流转场景", "接口校验场景"].map((value) => ({
-                      value,
-                      label: value
-                    }))}
-                  />
+                  <Select options={CASE_TYPE_OPTIONS} />
                 </Form.Item>
               </Col>
               <Col span={8}>
                 <Form.Item label="风险等级" name="riskLevel">
-                  <Select options={[{ value: "P0", label: "P0 高" }, { value: "P1", label: "P1 中" }, { value: "P2", label: "P2 低" }]} />
+                  <Select options={[{ value: "P0", label: "P0" }, { value: "P1", label: "P1" }, { value: "P2", label: "P2" }]} />
                 </Form.Item>
               </Col>
             </Row>
@@ -1101,7 +1105,7 @@ function StatusTag({ value }: { value?: string }) {
 
 function RiskTag({ value }: { value?: string }) {
   const color = value === "P0" ? "red" : value === "P1" ? "orange" : value === "P2" ? "green" : "default";
-  const label = value === "P0" ? "P0 高" : value === "P1" ? "P1 中" : value === "P2" ? "P2 低" : (value || "-");
+  const label = value === "P0" ? "P0" : value === "P1" ? "P1" : value === "P2" ? "P2" : (value || "-");
   return <Tag color={color}>{label}</Tag>;
 }
 
