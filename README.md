@@ -5,7 +5,7 @@
 ---
 
 AI TestOps is an end-to-end **AI-assisted test design** demo built with Spring Boot 3 + React. It connects requirement document ingestion, document parsing, AI requirement extraction, test case draft generation, automated validation, manual review, and test asset export into a lightweight closed loop.
-
+![alt text](image-1.png)
 The backend is built with **Java 17 + Spring Boot 3.5.9**, uses **MyBatis-Plus** for database persistence, **Apache Tika 3.2.3** for document parsing, and provides an **OpenAI-compatible REST client** for LLM integration (works with OpenAI, Qwen, DeepSeek, and any provider that supports `/v1/chat/completions`). API documentation is powered by **Knife4j**.
 
 The frontend is built with **React 18 + TypeScript + Ant Design 5 + Vite**. Production assets are emitted to `src/main/resources/static` and served directly by Spring Boot.
