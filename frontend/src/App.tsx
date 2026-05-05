@@ -51,7 +51,7 @@ import {
 } from "@ant-design/icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
-import { normalizeArray, jsonArrayRule } from "./utils";
+import { normalizeArray, jsonArrayRule, getDefaultCaseTypeForRiskLevel } from "./utils";
 import type {
   DocumentChunkVO,
   DocumentParseSummaryVO,
@@ -592,6 +592,11 @@ function App() {
             layout="vertical"
             initialValues={draftToForm(editingDraft)}
             key={editingDraft.draftCaseId}
+            onValuesChange={(changedValues) => {
+              if (changedValues.riskLevel) {
+                draftForm.setFieldValue("caseType", getDefaultCaseTypeForRiskLevel(changedValues.riskLevel));
+              }
+            }}
           >
             <Form.Item label="用例标题" name="title" rules={[{ required: true, message: "请输入用例标题" }]}>
               <Input maxLength={255} showCount />
@@ -618,16 +623,16 @@ function App() {
                 </Form.Item>
               </Col>
             </Row>
-            <Form.Item label="前置条件 JSON" name="preconditionsJson" rules={[jsonArrayRule("前置条件")]}>
+            <Form.Item label="前置条件 JSON" name="preconditionsJson" rules={[jsonArrayRule("前置条件", { allowEmpty: true })]}>
               <TextArea rows={4} />
             </Form.Item>
-            <Form.Item label="测试步骤 JSON" name="stepsJson" rules={[jsonArrayRule("测试步骤")]}>
+            <Form.Item label="测试步骤 JSON" name="stepsJson" rules={[jsonArrayRule("测试步骤", { allowEmpty: false })]}>
               <TextArea rows={8} />
             </Form.Item>
-            <Form.Item label="关联需求 JSON" name="requirementRefsJson" rules={[jsonArrayRule("关联需求")]}>
+            <Form.Item label="关联需求 JSON" name="requirementRefsJson" rules={[jsonArrayRule("关联需求", { allowEmpty: true })]}>
               <TextArea rows={3} />
             </Form.Item>
-            <Form.Item label="风险标签 JSON" name="riskTagsJson">
+            <Form.Item label="风险标签 JSON" name="riskTagsJson" rules={[jsonArrayRule("风险标签", { allowEmpty: true })]}>
               <TextArea rows={3} />
             </Form.Item>
           </Form>
@@ -1169,11 +1174,12 @@ function renderJsonTags(value?: string) {
 }
 
 function draftToForm(draft: TestCaseDraftVO) {
+  const riskLevel = draft.riskLevel || "P1";
   return {
     title: draft.title,
     priority: draft.priority || "P1",
-    caseType: draft.caseType || "正常场景",
-    riskLevel: draft.riskLevel || "P1",
+    caseType: draft.caseType || getDefaultCaseTypeForRiskLevel(riskLevel),
+    riskLevel,
     preconditionsJson: normalizeArray(draft.preconditionsJson),
     stepsJson: formatJson(draft.stepsJson || "[]"),
     requirementRefsJson: normalizeArray(draft.requirementRefsJson),
