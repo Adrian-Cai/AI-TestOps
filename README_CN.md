@@ -5,6 +5,7 @@
 ---
 
 AI TestOps 是一个面向 **AI 辅助测试设计** 的全链路 Spring Boot 3 + React 演示项目。系统将需求文档接入、文档解析、AI 需求抽取、测试用例草稿生成、自动校验、人工评审确认和用例导出串联成一条轻量闭环，适合验证 AI 辅助测试设计、需求到用例生成、Prompt 版本管理和测试资产沉淀等场景。
+![alt text](image.png)
 
 后端基于 **Java 17 + Spring Boot 3.5.9**，使用 **MyBatis-Plus** 持久化、**Apache Tika 3.2.3** 文档解析，并提供 **OpenAI 兼容的 REST Client** 适配大模型接口（兼容 OpenAI、通义千问 Qwen、DeepSeek 等支持 `/v1/chat/completions` 的服务）。接口文档集成 **Knife4j**。
 
