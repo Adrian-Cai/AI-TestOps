@@ -96,6 +96,7 @@ export interface TestCaseDraftVO {
   title: string;
   preconditionsJson?: string;
   stepsJson?: string;
+  expectedResultsJson?: string;
   priority?: string;
   caseType?: string;
   riskLevel?: string;
@@ -126,6 +127,7 @@ export interface TestCaseVO {
   title: string;
   preconditionsJson?: string;
   stepsJson?: string;
+  expectedResultsJson?: string;
   priority?: string;
   caseType?: string;
   riskLevel?: string;

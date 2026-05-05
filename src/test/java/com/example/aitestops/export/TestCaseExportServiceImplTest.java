@@ -132,10 +132,11 @@ class TestCaseExportServiceImplTest {
         testCase.setRiskLevel("P0");
         testCase.setRequirementRefsJson("[\"REQ_001\",\"REQ_004\"]");
         testCase.setPreconditionsJson("[\"用户已登录\",\"商品库存充足\"]");
+        testCase.setExpectedResultsJson("[\"页面正常展示\",\"订单提交成功\"]");
         testCase.setStepsJson("""
                 [
-                  {"step_no":1,"action":"进入下单页面","expected_result":"页面正常展示"},
-                  {"step_no":2,"action":"填写订单信息并提交","expected_result":"订单提交成功"}
+                  {"step_no":1,"action":"进入下单页面"},
+                  {"step_no":2,"action":"填写订单信息并提交"}
                 ]
                 """);
         testCase.setRiskTagsJson("[\"核心链路\",\"订单提交\"]");

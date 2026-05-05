@@ -310,8 +310,8 @@ public class AiTestopsPromptTemplateServiceImpl
                 你是一名资深测试设计专家。请根据结构化需求生成测试用例。
                 要求：
                 1. 只能输出 JSON，不要输出 Markdown，不要输出解释性文字。
-                2. 每条用例必须包含 case_id、title、preconditions、steps、priority、case_type、risk_level、requirement_refs、risk_tags。
-                3. steps 必须是数组，每个 step 必须包含 step_no、action、expected_result。
+                2. 每条用例必须包含 case_id、title、preconditions、steps、expected_results、priority、case_type、risk_level、requirement_refs、risk_tags。
+                3. steps 必须是数组，每个 step 必须包含 step_no、action；expected_results 必须是与 steps 一一对应的字符串数组。
                 4. 用例类型要覆盖正常场景、异常场景、边界场景。
                 5. 每条测试用例必须关联至少一个 requirement_id。
                 """;
@@ -325,7 +325,41 @@ public class AiTestopsPromptTemplateServiceImpl
 
     private String testCaseGenerateSchema() {
         return """
-                {"type":"object","required":["test_cases"]}
+                {
+                  "type":"object",
+                  "required":["test_cases"],
+                  "properties":{
+                    "test_cases":{
+                      "type":"array",
+                      "items":{
+                        "type":"object",
+                        "required":["case_id","title","preconditions","steps","expected_results","priority","case_type","risk_level","requirement_refs","risk_tags"],
+                        "properties":{
+                          "case_id":{"type":"string"},
+                          "title":{"type":"string"},
+                          "preconditions":{"type":"array"},
+                          "steps":{
+                            "type":"array",
+                            "items":{
+                              "type":"object",
+                              "required":["step_no","action"],
+                              "properties":{
+                                "step_no":{"type":"integer"},
+                                "action":{"type":"string"}
+                              }
+                            }
+                          },
+                          "expected_results":{"type":"array","items":{"type":"string"}},
+                          "priority":{"type":"string"},
+                          "case_type":{"type":"string"},
+                          "risk_level":{"type":"string"},
+                          "requirement_refs":{"type":"array"},
+                          "risk_tags":{"type":"array"}
+                        }
+                      }
+                    }
+                  }
+                }
                 """;
     }
 }

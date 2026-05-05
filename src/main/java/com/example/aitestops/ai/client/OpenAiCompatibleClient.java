@@ -156,9 +156,10 @@ public class OpenAiCompatibleClient implements AiClient {
                         "title", "正常提交订单",
                         "preconditions", List.of("用户已登录", "商品库存充足"),
                         "steps", List.of(
-                                Map.of("step_no", 1, "action", "进入下单页面", "expected_result", "页面正常展示"),
-                                Map.of("step_no", 2, "action", "填写订单信息并提交", "expected_result", "订单提交成功")
+                                Map.of("step_no", 1, "action", "进入下单页面"),
+                                Map.of("step_no", 2, "action", "填写订单信息并提交")
                         ),
+                        "expected_results", List.of("页面正常展示", "订单提交成功"),
                         "priority", "P1",
                         "case_type", "正常场景",
                         "risk_level", "P0",

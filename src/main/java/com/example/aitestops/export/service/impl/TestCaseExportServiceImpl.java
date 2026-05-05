@@ -91,7 +91,7 @@ public class TestCaseExportServiceImpl implements TestCaseExportService {
                 defaultString(testCase.getPriority()),
                 parseStringArrayForJson(testCase.getPreconditionsJson()),
                 steps.testSteps(),
-                steps.expectedResults(),
+                resolveExpectedResultsForJson(testCase.getExpectedResultsJson(), steps),
                 parseStringArrayForJson(testCase.getRiskTagsJson())
         );
     }
@@ -102,7 +102,7 @@ public class TestCaseExportServiceImpl implements TestCaseExportService {
         writeCell(row, contentStyle, 1, testCase.getPriority());
         writeCell(row, contentStyle, 2, formatStringArrayForExcel(testCase.getPreconditionsJson()));
         writeCell(row, contentStyle, 3, formatStepsForExcel(steps.testSteps(), steps.parsed(), steps.rawValue()));
-        writeCell(row, contentStyle, 4, formatStepsForExcel(steps.expectedResults(), steps.parsed(), steps.parsed() ? null : ""));
+        writeCell(row, contentStyle, 4, formatExpectedResultsForExcel(testCase.getExpectedResultsJson(), steps));
         writeCell(row, contentStyle, 5, formatStringArrayForExcel(testCase.getRiskTagsJson()));
     }
 
@@ -154,16 +154,16 @@ public class TestCaseExportServiceImpl implements TestCaseExportService {
                 return new StepParseResult(List.of(stepsJson), List.of(), false, stepsJson);
             }
             List<String> actions = new ArrayList<>();
-            List<String> expectedResults = new ArrayList<>();
+            List<String> legacyExpectedResults = new ArrayList<>();
             for (JsonNode stepNode : node) {
                 if (stepNode.isObject()) {
                     String action = textOrSerialized(stepNode.get("action"));
-                    String expected = textOrSerialized(stepNode.get("expected_result"));
                     if (StringUtils.hasText(action)) {
                         actions.add(action);
                     }
+                    String expected = textOrSerialized(stepNode.get("expected_result"));
                     if (StringUtils.hasText(expected)) {
-                        expectedResults.add(expected);
+                        legacyExpectedResults.add(expected);
                     }
                 } else {
                     String raw = stringifyNode(stepNode);
@@ -172,10 +172,36 @@ public class TestCaseExportServiceImpl implements TestCaseExportService {
                     }
                 }
             }
-            return new StepParseResult(actions, expectedResults, true, "");
+            return new StepParseResult(actions, legacyExpectedResults, true, "");
         } catch (Exception ex) {
             return new StepParseResult(List.of(stepsJson), List.of(), false, stepsJson);
         }
+    }
+
+    private List<String> resolveExpectedResultsForJson(String expectedResultsJson, StepParseResult steps) {
+        if (StringUtils.hasText(expectedResultsJson)) {
+            return parseStringArrayForJson(expectedResultsJson);
+        }
+        return steps.legacyExpectedResults();
+    }
+
+    private String formatExpectedResultsForExcel(String expectedResultsJson, StepParseResult steps) {
+        if (StringUtils.hasText(expectedResultsJson)) {
+            try {
+                JsonNode node = objectMapper.readTree(expectedResultsJson);
+                if (!node.isArray()) {
+                    return expectedResultsJson;
+                }
+                List<String> items = new ArrayList<>();
+                for (JsonNode item : node) {
+                    items.add(stringifyNode(item));
+                }
+                return formatStepsForExcel(items, true, null);
+            } catch (Exception ex) {
+                return expectedResultsJson;
+            }
+        }
+        return formatStepsForExcel(steps.legacyExpectedResults(), steps.parsed(), steps.parsed() ? null : "");
     }
 
     private String formatStepsForExcel(List<String> steps, boolean parsed, String rawValue) {
@@ -214,6 +240,6 @@ public class TestCaseExportServiceImpl implements TestCaseExportService {
         cell.setCellStyle(style);
     }
 
-    private record StepParseResult(List<String> testSteps, List<String> expectedResults, boolean parsed, String rawValue) {
+    private record StepParseResult(List<String> testSteps, List<String> legacyExpectedResults, boolean parsed, String rawValue) {
     }
 }

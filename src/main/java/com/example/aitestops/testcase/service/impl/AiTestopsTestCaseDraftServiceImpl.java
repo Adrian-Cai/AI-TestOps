@@ -167,6 +167,7 @@ public class AiTestopsTestCaseDraftServiceImpl
     public TestCaseDraftVO updateDraft(String draftCaseId, TestCaseDraftUpdateRequest request) {
         AiTestopsTestCaseDraft draft = requireDraft(draftCaseId);
         assertDraftEditable(draft);
+        normalizeDraftContentForPersistence(draft);
         String beforeJson = JsonUtil.toJson(objectMapper, toVO(draft));
         applyDraftUpdates(draft, request);
         draft.setRawCaseJson(buildRawCaseJson(draft));
@@ -183,6 +184,7 @@ public class AiTestopsTestCaseDraftServiceImpl
     public TestCaseVO approveDraft(String draftCaseId, TestCaseDraftReviewRequest request) {
         AiTestopsTestCaseDraft draft = requireDraft(draftCaseId);
         assertDraftEditable(draft);
+        normalizeDraftContentForPersistence(draft);
         String beforeJson = JsonUtil.toJson(objectMapper, toVO(draft));
         LocalDateTime now = LocalDateTime.now();
         AiTestopsTestCase testCase = buildFormalCase(draft, now);
@@ -347,11 +349,11 @@ public class AiTestopsTestCaseDraftServiceImpl
                 输出约束：
                 1. 只输出一个紧凑 JSON object，不要输出 Markdown 或解释。
                 2. 根对象必须且只能使用字段 test_cases，test_cases 必须是非空数组。
-                3. test_cases 最多 30 条，每条必须包含 case_id、title、preconditions、steps、priority、case_type、risk_level、requirement_refs、risk_tags。
-                4. steps 必须是非空数组，每个 step 必须包含 step_no、action、expected_result。
+                3. test_cases 最多 30 条，每条必须包含 case_id、title、preconditions、steps、expected_results、priority、case_type、risk_level、requirement_refs、risk_tags。
+                4. steps 必须是非空数组，每个 step 必须包含 step_no、action；expected_results 必须是与 steps 一一对应的非空字符串数组。
                 5. case_type 覆盖 NORMAL、EXCEPTION、BOUNDARY；priority 只能使用 P0、P1、P2、P3；risk_level 只能使用 P0、P1、P2（分别对应高、中、低）。
                 6. requirement_refs 只引用输入中的 requirement_id。
-                7. title 不超过 80 个中文字符，action 和 expected_result 各不超过 160 个中文字符。
+                7. title 不超过 80 个中文字符，action 和 expected_results 中每个元素各不超过 160 个中文字符。
                 输入：
                 """ + JsonUtil.toJson(objectMapper, input);
     }
@@ -486,6 +488,7 @@ public class AiTestopsTestCaseDraftServiceImpl
             requireText(item, "title", prefix, errors);
             requireText(item, "priority", prefix, errors);
             requireArray(item, "steps", prefix, errors);
+            requireArray(item, "expected_results", prefix, errors);
             requireArray(item, "requirement_refs", prefix, errors);
         }
         return errors;
@@ -494,15 +497,35 @@ public class AiTestopsTestCaseDraftServiceImpl
     private List<String> validateFormat(JsonNode testCases) {
         List<String> errors = new ArrayList<>();
         for (int i = 0; i < testCases.size(); i++) {
-            JsonNode steps = testCases.get(i).get("steps");
+            JsonNode item = testCases.get(i);
+            JsonNode steps = item.get("steps");
+            JsonNode expectedResults = item.get("expected_results");
             if (steps == null || !steps.isArray()) {
                 continue;
             }
             for (int j = 0; j < steps.size(); j++) {
                 JsonNode step = steps.get(j);
                 String prefix = "test_cases[" + i + "].steps[" + j + "]";
+                if (step == null || !step.isObject()) {
+                    errors.add(prefix + " 必须是对象");
+                    continue;
+                }
+                if (step.get("step_no") == null || step.get("step_no").isNull()) {
+                    errors.add(prefix + ".step_no 不能为空");
+                }
                 requireText(step, "action", prefix, errors);
-                requireText(step, "expected_result", prefix, errors);
+            }
+            if (expectedResults == null || !expectedResults.isArray()) {
+                continue;
+            }
+            if (steps.size() != expectedResults.size()) {
+                errors.add("test_cases[" + i + "].expected_results 数量必须与 steps 一致");
+            }
+            for (int j = 0; j < expectedResults.size(); j++) {
+                JsonNode expected = expectedResults.get(j);
+                if (expected == null || !expected.isTextual() || !StringUtils.hasText(expected.asText())) {
+                    errors.add("test_cases[" + i + "].expected_results[" + j + "] 必须是非空字符串");
+                }
             }
         }
         return errors;
@@ -568,7 +591,13 @@ public class AiTestopsTestCaseDraftServiceImpl
             draft.setRequirementExtractId(extract == null ? null : extract.getRequirementExtractId());
             draft.setTitle(textValue(item, "title"));
             draft.setPreconditionsJson(jsonField(item, "preconditions", "[]"));
-            draft.setStepsJson(jsonField(item, "steps", "[]"));
+            NormalizedCaseContent normalized = normalizeCaseContentForPersistence(
+                    jsonField(item, "steps", "[]"),
+                    jsonField(item, "expected_results", "[]"),
+                    false
+            );
+            draft.setStepsJson(normalized.stepsJson());
+            draft.setExpectedResultsJson(normalized.expectedResultsJson());
             draft.setPriority(textValue(item, "priority"));
             draft.setCaseType(textValue(item, "case_type"));
             draft.setRiskLevel(textValue(item, "risk_level"));
@@ -617,9 +646,14 @@ public class AiTestopsTestCaseDraftServiceImpl
             validateJsonArray(request.getPreconditionsJson(), "preconditionsJson");
             draft.setPreconditionsJson(request.getPreconditionsJson());
         }
-        if (StringUtils.hasText(request.getStepsJson())) {
-            validateJsonArray(request.getStepsJson(), "stepsJson");
-            draft.setStepsJson(request.getStepsJson());
+        if (StringUtils.hasText(request.getStepsJson()) || StringUtils.hasText(request.getExpectedResultsJson())) {
+            NormalizedCaseContent normalized = normalizeCaseContentForPersistence(
+                    StringUtils.hasText(request.getStepsJson()) ? request.getStepsJson() : draft.getStepsJson(),
+                    StringUtils.hasText(request.getExpectedResultsJson()) ? request.getExpectedResultsJson() : draft.getExpectedResultsJson(),
+                    true
+            );
+            draft.setStepsJson(normalized.stepsJson());
+            draft.setExpectedResultsJson(normalized.expectedResultsJson());
         }
         if (StringUtils.hasText(request.getPriority())) {
             draft.setPriority(request.getPriority());
@@ -648,7 +682,13 @@ public class AiTestopsTestCaseDraftServiceImpl
         if (!StringUtils.hasText(draft.getPriority())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "测试用例优先级不能为空");
         }
-        validateNonEmptyJsonArray(draft.getStepsJson(), "stepsJson");
+        NormalizedCaseContent normalized = normalizeCaseContentForPersistence(
+                draft.getStepsJson(),
+                draft.getExpectedResultsJson(),
+                true
+        );
+        draft.setStepsJson(normalized.stepsJson());
+        draft.setExpectedResultsJson(normalized.expectedResultsJson());
         validateJsonArray(draft.getRequirementRefsJson(), "requirementRefsJson");
     }
 
@@ -684,6 +724,7 @@ public class AiTestopsTestCaseDraftServiceImpl
         raw.put("title", draft.getTitle());
         raw.put("preconditions", parseJsonOrDefault(draft.getPreconditionsJson(), List.of()));
         raw.put("steps", parseJsonOrDefault(draft.getStepsJson(), List.of()));
+        raw.put("expected_results", parseJsonOrDefault(draft.getExpectedResultsJson(), List.of()));
         raw.put("priority", draft.getPriority());
         raw.put("case_type", draft.getCaseType());
         raw.put("risk_level", draft.getRiskLevel());
@@ -715,6 +756,7 @@ public class AiTestopsTestCaseDraftServiceImpl
         testCase.setTitle(draft.getTitle());
         testCase.setPreconditionsJson(draft.getPreconditionsJson());
         testCase.setStepsJson(draft.getStepsJson());
+        testCase.setExpectedResultsJson(draft.getExpectedResultsJson());
         testCase.setPriority(draft.getPriority());
         testCase.setCaseType(draft.getCaseType());
         testCase.setRiskLevel(draft.getRiskLevel());
@@ -829,6 +871,7 @@ public class AiTestopsTestCaseDraftServiceImpl
     }
 
     private TestCaseVO toCaseVO(AiTestopsTestCase testCase) {
+        ViewCaseContent normalized = normalizeCaseContentForView(testCase.getStepsJson(), testCase.getExpectedResultsJson());
         TestCaseVO vo = new TestCaseVO();
         vo.setTestCaseId(testCase.getTestCaseId());
         vo.setSourceDraftCaseId(testCase.getSourceDraftCaseId());
@@ -838,7 +881,8 @@ public class AiTestopsTestCaseDraftServiceImpl
         vo.setRequirementExtractId(testCase.getRequirementExtractId());
         vo.setTitle(testCase.getTitle());
         vo.setPreconditionsJson(testCase.getPreconditionsJson());
-        vo.setStepsJson(testCase.getStepsJson());
+        vo.setStepsJson(normalized.stepsJson());
+        vo.setExpectedResultsJson(normalized.expectedResultsJson());
         vo.setPriority(testCase.getPriority());
         vo.setCaseType(testCase.getCaseType());
         vo.setRiskLevel(testCase.getRiskLevel());
@@ -851,6 +895,7 @@ public class AiTestopsTestCaseDraftServiceImpl
     }
 
     private TestCaseDraftVO toVO(AiTestopsTestCaseDraft draft) {
+        ViewCaseContent normalized = normalizeCaseContentForView(draft.getStepsJson(), draft.getExpectedResultsJson());
         TestCaseDraftVO vo = new TestCaseDraftVO();
         vo.setDraftCaseId(draft.getDraftCaseId());
         vo.setCaseId(draft.getCaseId());
@@ -859,7 +904,8 @@ public class AiTestopsTestCaseDraftServiceImpl
         vo.setRequirementExtractId(draft.getRequirementExtractId());
         vo.setTitle(draft.getTitle());
         vo.setPreconditionsJson(draft.getPreconditionsJson());
-        vo.setStepsJson(draft.getStepsJson());
+        vo.setStepsJson(normalized.stepsJson());
+        vo.setExpectedResultsJson(normalized.expectedResultsJson());
         vo.setPriority(draft.getPriority());
         vo.setCaseType(draft.getCaseType());
         vo.setRiskLevel(draft.getRiskLevel());
@@ -881,5 +927,137 @@ public class AiTestopsTestCaseDraftServiceImpl
             return value;
         }
         return value.substring(0, maxLength);
+    }
+
+    private void normalizeDraftContentForPersistence(AiTestopsTestCaseDraft draft) {
+        if (draft == null || !StringUtils.hasText(draft.getStepsJson())) {
+            return;
+        }
+        NormalizedCaseContent normalized = normalizeCaseContentForPersistence(
+                draft.getStepsJson(),
+                draft.getExpectedResultsJson(),
+                true
+        );
+        draft.setStepsJson(normalized.stepsJson());
+        draft.setExpectedResultsJson(normalized.expectedResultsJson());
+    }
+
+    private NormalizedCaseContent normalizeCaseContentForPersistence(String stepsJson,
+                                                                     String expectedResultsJson,
+                                                                     boolean allowLegacyExpectedInSteps) {
+        try {
+            JsonNode stepsNode = objectMapper.readTree(stepsJson);
+            if (!stepsNode.isArray() || stepsNode.isEmpty()) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST, "stepsJson 必须是非空 JSON 数组");
+            }
+            List<ObjectNode> sanitizedSteps = new ArrayList<>();
+            List<String> legacyExpectedResults = new ArrayList<>();
+            for (int i = 0; i < stepsNode.size(); i++) {
+                JsonNode stepNode = stepsNode.get(i);
+                if (stepNode == null || !stepNode.isObject()) {
+                    throw new BusinessException(ErrorCode.BAD_REQUEST, "stepsJson[" + i + "] 必须是对象");
+                }
+                ObjectNode sanitizedStep = ((ObjectNode) stepNode.deepCopy());
+                if (sanitizedStep.get("step_no") == null || sanitizedStep.get("step_no").isNull()) {
+                    throw new BusinessException(ErrorCode.BAD_REQUEST, "stepsJson[" + i + "].step_no 不能为空");
+                }
+                if (!StringUtils.hasText(textValue(sanitizedStep, "action"))) {
+                    throw new BusinessException(ErrorCode.BAD_REQUEST, "stepsJson[" + i + "].action 不能为空");
+                }
+                JsonNode legacyExpected = sanitizedStep.remove("expected_result");
+                if (allowLegacyExpectedInSteps && !StringUtils.hasText(expectedResultsJson)
+                        && legacyExpected != null && !legacyExpected.isNull() && StringUtils.hasText(legacyExpected.asText())) {
+                    legacyExpectedResults.add(legacyExpected.asText());
+                }
+                sanitizedSteps.add(sanitizedStep);
+            }
+
+            List<String> normalizedExpectedResults;
+            if (StringUtils.hasText(expectedResultsJson)) {
+                normalizedExpectedResults = parseStringArray(expectedResultsJson, "expectedResultsJson", true);
+            } else if (allowLegacyExpectedInSteps && !legacyExpectedResults.isEmpty()) {
+                normalizedExpectedResults = legacyExpectedResults;
+            } else {
+                throw new BusinessException(ErrorCode.BAD_REQUEST, "expectedResultsJson 必须是非空 JSON 数组");
+            }
+            if (sanitizedSteps.size() != normalizedExpectedResults.size()) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST, "expectedResultsJson 数量必须与 stepsJson 一致");
+            }
+            return new NormalizedCaseContent(
+                    objectMapper.writeValueAsString(sanitizedSteps),
+                    objectMapper.writeValueAsString(normalizedExpectedResults)
+            );
+        } catch (BusinessException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "步骤或预期结果不是合法 JSON: " + ex.getMessage(), ex);
+        }
+    }
+
+    private ViewCaseContent normalizeCaseContentForView(String stepsJson, String expectedResultsJson) {
+        String normalizedStepsJson = stepsJson;
+        String normalizedExpectedResultsJson = StringUtils.hasText(expectedResultsJson) ? expectedResultsJson : "[]";
+        try {
+            JsonNode stepsNode = StringUtils.hasText(stepsJson) ? objectMapper.readTree(stepsJson) : objectMapper.createArrayNode();
+            if (stepsNode.isArray()) {
+                List<ObjectNode> sanitizedSteps = new ArrayList<>();
+                List<String> legacyExpectedResults = new ArrayList<>();
+                for (JsonNode stepNode : stepsNode) {
+                    if (stepNode != null && stepNode.isObject()) {
+                        ObjectNode sanitizedStep = ((ObjectNode) stepNode.deepCopy());
+                        JsonNode legacyExpected = sanitizedStep.remove("expected_result");
+                        if (legacyExpected != null && !legacyExpected.isNull() && StringUtils.hasText(legacyExpected.asText())) {
+                            legacyExpectedResults.add(legacyExpected.asText());
+                        }
+                        sanitizedSteps.add(sanitizedStep);
+                    }
+                }
+                normalizedStepsJson = objectMapper.writeValueAsString(sanitizedSteps);
+                if (!StringUtils.hasText(expectedResultsJson) && !legacyExpectedResults.isEmpty()) {
+                    normalizedExpectedResultsJson = objectMapper.writeValueAsString(legacyExpectedResults);
+                } else if (StringUtils.hasText(expectedResultsJson)) {
+                    normalizedExpectedResultsJson = objectMapper.writeValueAsString(
+                            parseStringArray(expectedResultsJson, "expectedResultsJson", false)
+                    );
+                }
+            }
+        } catch (Exception ex) {
+            normalizedStepsJson = stepsJson;
+            normalizedExpectedResultsJson = StringUtils.hasText(expectedResultsJson) ? expectedResultsJson : "[]";
+        }
+        return new ViewCaseContent(
+                normalizedStepsJson == null ? "[]" : normalizedStepsJson,
+                normalizedExpectedResultsJson == null ? "[]" : normalizedExpectedResultsJson
+        );
+    }
+
+    private List<String> parseStringArray(String json, String fieldName, boolean requireNonEmpty) {
+        try {
+            JsonNode node = objectMapper.readTree(json);
+            if (!node.isArray() || (requireNonEmpty && node.isEmpty())) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST,
+                        fieldName + (requireNonEmpty ? " 必须是非空 JSON 数组" : " 必须是 JSON 数组"));
+            }
+            List<String> items = new ArrayList<>();
+            for (int i = 0; i < node.size(); i++) {
+                JsonNode item = node.get(i);
+                if (item == null || !item.isTextual() || !StringUtils.hasText(item.asText())) {
+                    throw new BusinessException(ErrorCode.BAD_REQUEST,
+                            fieldName + "[" + i + "] 必须是非空字符串");
+                }
+                items.add(item.asText());
+            }
+            return items;
+        } catch (BusinessException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, fieldName + " 不是合法 JSON: " + ex.getMessage(), ex);
+        }
+    }
+
+    private record NormalizedCaseContent(String stepsJson, String expectedResultsJson) {
+    }
+
+    private record ViewCaseContent(String stepsJson, String expectedResultsJson) {
     }
 }

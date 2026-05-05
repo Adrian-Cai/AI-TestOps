@@ -366,6 +366,7 @@ function App() {
         title: values.title,
         preconditionsJson: normalizeArray(values.preconditionsJson),
         stepsJson: normalizeArray(values.stepsJson),
+        expectedResultsJson: normalizeArray(values.expectedResultsJson),
         priority: values.priority,
         caseType,
         riskLevel,
@@ -632,6 +633,9 @@ function App() {
             </Form.Item>
             <Form.Item label="测试步骤 JSON" name="stepsJson" rules={[jsonArrayRule("测试步骤", { allowEmpty: false })]}>
               <TextArea rows={8} />
+            </Form.Item>
+            <Form.Item label="预期结果 JSON" name="expectedResultsJson" rules={[jsonArrayRule("预期结果", { allowEmpty: false })]}>
+              <TextArea rows={4} />
             </Form.Item>
             <Form.Item label="关联需求 JSON" name="requirementRefsJson" rules={[jsonArrayRule("关联需求", { allowEmpty: true })]}>
               <TextArea rows={3} />
@@ -1179,16 +1183,54 @@ function renderJsonTags(value?: string) {
 
 function draftToForm(draft: TestCaseDraftVO) {
   const riskLevel = draft.riskLevel || "P1";
+  const normalizedStepsJson = normalizeStepsJsonForEditor(draft.stepsJson || "[]");
+  const normalizedExpectedResultsJson = normalizeExpectedResultsJsonForEditor(draft.stepsJson, draft.expectedResultsJson);
   return {
     title: draft.title,
     priority: draft.priority || "P1",
     caseType: draft.caseType ? formatCaseType(draft.caseType) : getDefaultCaseTypeForRiskLevel(riskLevel),
     riskLevel,
     preconditionsJson: normalizeArray(draft.preconditionsJson),
-    stepsJson: formatJson(draft.stepsJson || "[]"),
+    stepsJson: normalizedStepsJson,
+    expectedResultsJson: normalizedExpectedResultsJson,
     requirementRefsJson: normalizeArray(draft.requirementRefsJson),
     riskTagsJson: normalizeArray(draft.riskTagsJson)
   };
+}
+
+function normalizeStepsJsonForEditor(stepsJson?: string) {
+  if (!stepsJson) return "[]";
+  try {
+    const parsed = JSON.parse(stepsJson);
+    if (!Array.isArray(parsed)) return formatJson(stepsJson);
+    const normalized = parsed.map((item) => {
+      if (item && typeof item === "object" && !Array.isArray(item)) {
+        const { expected_result: _ignored, ...rest } = item as Record<string, unknown>;
+        return rest;
+      }
+      return item;
+    });
+    return JSON.stringify(normalized, null, 2);
+  } catch {
+    return formatJson(stepsJson);
+  }
+}
+
+function normalizeExpectedResultsJsonForEditor(stepsJson?: string, expectedResultsJson?: string) {
+  if (expectedResultsJson) {
+    return normalizeArray(expectedResultsJson);
+  }
+  if (!stepsJson) return "[]";
+  try {
+    const parsed = JSON.parse(stepsJson);
+    if (!Array.isArray(parsed)) return "[]";
+    const expectedResults = parsed
+      .map((item) => (item && typeof item === "object" && !Array.isArray(item) ? (item as Record<string, unknown>).expected_result : undefined))
+      .filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+    return JSON.stringify(expectedResults, null, 2);
+  } catch {
+    return "[]";
+  }
 }
 
 function formatSize(size: number) {

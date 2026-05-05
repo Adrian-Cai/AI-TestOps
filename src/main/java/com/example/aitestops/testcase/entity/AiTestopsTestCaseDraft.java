@@ -24,6 +24,7 @@ public class AiTestopsTestCaseDraft {
     private String title;
     private String preconditionsJson;
     private String stepsJson;
+    private String expectedResultsJson;
     private String priority;
     private String caseType;
     private String riskLevel;
