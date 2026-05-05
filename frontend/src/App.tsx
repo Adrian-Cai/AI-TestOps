@@ -51,7 +51,7 @@ import {
 } from "@ant-design/icons";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
-import { normalizeArray, jsonArrayRule, getDefaultCaseTypeForRiskLevel } from "./utils";
+import { normalizeArray, jsonArrayRule, getDefaultCaseTypeForRiskLevel, formatCaseType, toEnglishCaseType } from "./utils";
 import type {
   DocumentChunkVO,
   DocumentParseSummaryVO,
@@ -358,7 +358,7 @@ function App() {
         preconditionsJson: normalizeArray(values.preconditionsJson),
         stepsJson: normalizeArray(values.stepsJson),
         priority: values.priority,
-        caseType: values.caseType,
+        caseType: toEnglishCaseType(values.caseType),
         riskLevel: values.riskLevel,
         requirementRefsJson: normalizeArray(values.requirementRefsJson),
         riskTagsJson: normalizeArray(values.riskTagsJson),
@@ -449,7 +449,7 @@ function App() {
     },
     { title: "用例标题", dataIndex: "title", width: 260, render: (value) => <Text strong>{value}</Text> },
     { title: "优先级", dataIndex: "priority", width: 90, render: (value) => <Tag color="blue">{value || "-"}</Tag> },
-    { title: "类型", dataIndex: "caseType", width: 130 },
+    { title: "类型", dataIndex: "caseType", width: 130, render: (value) => <Tag color="purple">{formatCaseType(value)}</Tag> },
     { title: "风险等级", dataIndex: "riskLevel", width: 110, render: (value) => <RiskTag value={value} /> },
     { title: "关联需求", dataIndex: "requirementRefsJson", width: 180, render: (value) => renderJsonTags(value) },
     {
@@ -476,7 +476,7 @@ function App() {
     { title: "Case ID", dataIndex: "caseId", width: 130 },
     { title: "标题", dataIndex: "title", width: 280, render: (value) => <Text strong>{value}</Text> },
     { title: "优先级", dataIndex: "priority", width: 90, render: (value) => <Tag color="blue">{value || "-"}</Tag> },
-    { title: "类型", dataIndex: "caseType", width: 130 },
+    { title: "类型", dataIndex: "caseType", width: 130, render: (value) => <Tag color="purple">{formatCaseType(value)}</Tag> },
     { title: "风险", dataIndex: "riskLevel", width: 100, render: (value) => <RiskTag value={value} /> },
     { title: "状态", dataIndex: "status", width: 100, render: (value) => <Tag color="green">{value || "ACTIVE"}</Tag> },
     { title: "关联需求", dataIndex: "requirementRefsJson", render: (value) => renderJsonTags(value) }
@@ -1178,7 +1178,7 @@ function draftToForm(draft: TestCaseDraftVO) {
   return {
     title: draft.title,
     priority: draft.priority || "P1",
-    caseType: draft.caseType || getDefaultCaseTypeForRiskLevel(riskLevel),
+    caseType: draft.caseType ? formatCaseType(draft.caseType) : getDefaultCaseTypeForRiskLevel(riskLevel),
     riskLevel,
     preconditionsJson: normalizeArray(draft.preconditionsJson),
     stepsJson: formatJson(draft.stepsJson || "[]"),
