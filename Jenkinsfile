@@ -1,6 +1,7 @@
 
 pipeline {
-    agent any
+    // 部署任务必须在主节点（Jenkins Master）执行，不要跑到测试节点
+    agent { label 'built-in' }
 
     environment {
         IMAGE_NAME  = "docker.cnb.cool/imacaiy/ai-testops"
