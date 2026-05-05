@@ -311,7 +311,7 @@ public class AiTestopsPromptTemplateServiceImpl
                 要求：
                 1. 只能输出 JSON，不要输出 Markdown，不要输出解释性文字。
                 2. 每条用例必须包含 case_id、title、preconditions、steps、expected_results、priority、case_type、risk_level、requirement_refs、risk_tags。
-                3. steps 必须是数组，每个 step 必须包含 step_no、action；expected_results 必须是与 steps 一一对应的字符串数组。
+                3. steps 必须是数组，每个 step 必须包含 step_no、action；expected_results 必须是非空字符串数组，优先与 steps 按顺序对应；如果场景只有整体预期，也允许输出 1 条总体预期结果。
                 4. 用例类型要覆盖正常场景、异常场景、边界场景。
                 5. 每条测试用例必须关联至少一个 requirement_id。
                 """;

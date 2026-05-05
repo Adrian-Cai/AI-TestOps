@@ -174,6 +174,40 @@ class AiTestopsTestCaseDraftServiceIntegrationTest {
         assertThat(loaded.getExpectedResultsJson()).isEqualTo("[\"提交成功\"]");
     }
 
+    @Test
+    void approveDraftShouldAllowOverallExpectedResultsNotMatchingStepCount() {
+        AiTestopsTestCaseDraft draft = new AiTestopsTestCaseDraft();
+        draft.setDraftCaseId("DRAFT_MISMATCH_001");
+        draft.setCaseId("TC_MISMATCH_001");
+        draft.setGenerationId("GEN_MISMATCH_001");
+        draft.setDocumentId("DOC_MISMATCH_001");
+        draft.setTitle("鏁翠綋棰勬湡缁撴灉鍏煎");
+        draft.setPreconditionsJson("[]");
+        draft.setStepsJson("""
+                [
+                  {"step_no":1,"action":"鎵撳紑鐢宠椤甸潰"},
+                  {"step_no":2,"action":"鎻愪氦宸梾鐢宠"}
+                ]
+                """);
+        draft.setExpectedResultsJson("[\"鐢宠鎻愪氦鎴愬姛锛岀郴缁熻繑鍥炵敵璇峰崟 ID\"]");
+        draft.setPriority("P1");
+        draft.setRequirementRefsJson("[\"REQ_001\"]");
+        draft.setReviewStatus("PENDING");
+        draft.setRawCaseJson("{}");
+        draft.setCreatedAt(LocalDateTime.now());
+        draft.setUpdatedAt(LocalDateTime.now());
+        testCaseDraftService.save(draft);
+
+        TestCaseDraftReviewRequest approveRequest = new TestCaseDraftReviewRequest();
+        approveRequest.setReviewer("qa");
+        approveRequest.setReason("allow overall expected result");
+        TestCaseVO approved = testCaseDraftService.approveDraft("DRAFT_MISMATCH_001", approveRequest);
+
+        assertThat(approved.getStepsJson()).contains("step_no");
+        assertThat(approved.getExpectedResultsJson())
+                .isEqualTo("[\"鐢宠鎻愪氦鎴愬姛锛岀郴缁熻繑鍥炵敵璇峰崟 ID\"]");
+    }
+
     private TestCaseGenerateVO generateOneDraft() {
         TextDocumentCreateRequest createRequest = new TextDocumentCreateRequest();
         createRequest.setTitle("订单需求");

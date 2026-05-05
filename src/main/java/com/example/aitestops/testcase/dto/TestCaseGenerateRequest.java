@@ -12,4 +12,5 @@ public class TestCaseGenerateRequest {
     private String requirementExtractId;
     private String modelCode = "default";
     private String promptTemplateCode = "TEST_CASE_GENERATE";
+    private Integer caseCount;
 }

@@ -175,6 +175,7 @@ function App() {
   const [editingDraft, setEditingDraft] = useState<TestCaseDraftVO | null>(null);
   const [logSeed, setLogSeed] = useState(0);
   const [logs, setLogs] = useState<OperationLog[]>([]);
+  const [caseCount, setCaseCount] = useState(20);
   const [draftForm] = Form.useForm();
 
   const documentId = documentInfo?.documentId;
@@ -313,7 +314,8 @@ function App() {
         documentId,
         requirementExtractId: requirementExtract?.requirementExtractId,
         modelCode: "default",
-        promptTemplateCode: "TEST_CASE_GENERATE"
+        promptTemplateCode: "TEST_CASE_GENERATE",
+        caseCount
       })
     );
     if (data) {
@@ -791,7 +793,7 @@ function App() {
             </Col>
             <Col xs={24} md={8}>
               <Text type="secondary">用例数量</Text>
-              <InputNumber className="full-width" value={20} min={10} max={30} disabled />
+              <InputNumber className="full-width" value={caseCount} min={1} max={50} onChange={(val) => setCaseCount(val ?? 20)} />
             </Col>
           </Row>
           <Divider />
@@ -830,13 +832,13 @@ function App() {
           </Row>
           <Divider />
           {progressVisible && (
-            <div style={{ marginBottom: 16 }}>
+            <div className="progress-wrapper">
               <Progress
                 percent={progressPercent}
                 status={progressPercent === 100 ? "success" : "active"}
                 strokeColor={{ from: "#108ee9", to: "#87d068" }}
               />
-              <Text type="secondary" style={{ display: "block", textAlign: "center", marginTop: 4 }}>
+              <Text type="secondary" className="progress-label">
                 {progressLabel}
               </Text>
             </div>

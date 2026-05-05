@@ -106,7 +106,7 @@ public class AiTestopsTestCaseDraftServiceImpl
                     .modelCode(resolveModelCode(request.getModelCode()))
                     .modelName(aiModelProperties.getModelName())
                     .systemPrompt(template.getPromptContent())
-                    .userPrompt(buildUserPrompt(document, requirementExtract, chunks))
+                    .userPrompt(buildUserPrompt(document, requirementExtract, chunks, request))
                     .generationType(GenerationTypeEnum.TEST_CASE_GENERATE.name())
                     .jsonSchema(template.getJsonSchema())
                     .build());
@@ -327,7 +327,9 @@ public class AiTestopsTestCaseDraftServiceImpl
         return snapshot;
     }
 
-    private String buildUserPrompt(AiTestopsDocument document, AiTestopsRequirementExtract extract, List<AiTestopsDocumentChunk> chunks) {
+    private String buildUserPrompt(AiTestopsDocument document, AiTestopsRequirementExtract extract,
+                                                   List<AiTestopsDocumentChunk> chunks,
+                                                   TestCaseGenerateRequest request) {
         Map<String, Object> input = new LinkedHashMap<>();
         input.put("document_id", document.getDocumentId());
         input.put("title", document.getTitle());
@@ -344,13 +346,16 @@ public class AiTestopsTestCaseDraftServiceImpl
             chunkMap.put("chunk_text", chunk.getChunkText());
             return chunkMap;
         }).toList());
+        int maxCases = request.getCaseCount() != null && request.getCaseCount() > 0
+                ? Math.min(request.getCaseCount(), 50)
+                : 20;
         return """
                 请基于以下结构化需求和文档 chunks 生成测试用例。
                 输出约束：
                 1. 只输出一个紧凑 JSON object，不要输出 Markdown 或解释。
                 2. 根对象必须且只能使用字段 test_cases，test_cases 必须是非空数组。
-                3. test_cases 最多 30 条，每条必须包含 case_id、title、preconditions、steps、expected_results、priority、case_type、risk_level、requirement_refs、risk_tags。
-                4. steps 必须是非空数组，每个 step 必须包含 step_no、action；expected_results 必须是与 steps 一一对应的非空字符串数组。
+                3. test_cases 最多 """ + maxCases + """ 条，每条必须包含 case_id、title、preconditions、steps、expected_results、priority、case_type、risk_level、requirement_refs、risk_tags。
+                4. steps 必须是非空数组，每个 step 必须包含 step_no、action；expected_results 必须是非空字符串数组，优先与 steps 按顺序对应；如果场景只有整体预期，也允许输出 1 条总体预期结果。
                 5. case_type 覆盖 NORMAL、EXCEPTION、BOUNDARY；priority 只能使用 P0、P1、P2、P3；risk_level 只能使用 P0、P1、P2（分别对应高、中、低）。
                 6. requirement_refs 只引用输入中的 requirement_id。
                 7. title 不超过 80 个中文字符，action 和 expected_results 中每个元素各不超过 160 个中文字符。
@@ -517,9 +522,6 @@ public class AiTestopsTestCaseDraftServiceImpl
             }
             if (expectedResults == null || !expectedResults.isArray()) {
                 continue;
-            }
-            if (steps.size() != expectedResults.size()) {
-                errors.add("test_cases[" + i + "].expected_results 数量必须与 steps 一致");
             }
             for (int j = 0; j < expectedResults.size(); j++) {
                 JsonNode expected = expectedResults.get(j);
@@ -979,9 +981,6 @@ public class AiTestopsTestCaseDraftServiceImpl
                 normalizedExpectedResults = legacyExpectedResults;
             } else {
                 throw new BusinessException(ErrorCode.BAD_REQUEST, "expectedResultsJson 必须是非空 JSON 数组");
-            }
-            if (sanitizedSteps.size() != normalizedExpectedResults.size()) {
-                throw new BusinessException(ErrorCode.BAD_REQUEST, "expectedResultsJson 数量必须与 stepsJson 一致");
             }
             return new NormalizedCaseContent(
                     objectMapper.writeValueAsString(sanitizedSteps),

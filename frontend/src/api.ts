@@ -66,7 +66,7 @@ export const api = {
   listValidations(generationId: string) {
     return requestJson<ValidationResultVO[]>(`/api/ai-testops/validations/${encodeURIComponent(generationId)}`);
   },
-  generateCases(input: { documentId: string; requirementExtractId?: string; modelCode: string; promptTemplateCode: string }) {
+  generateCases(input: { documentId: string; requirementExtractId?: string; modelCode: string; promptTemplateCode: string; caseCount?: number }) {
     return requestJson<TestCaseGenerateVO>("/api/ai-testops/testcases/generate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
