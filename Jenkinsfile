@@ -136,13 +136,8 @@ pipeline {
                         # 使用固定端口 18888
                         HOST_PORT=18888
 
-                        # 检查端口是否已被占用
-                        if ss -tln | grep -q ":\$HOST_PORT "; then
-                            echo "[ERROR] 端口 \$HOST_PORT 已被占用，请先释放该端口或停止占用进程"
-                            exit 1
-                        fi
-
-                        echo "[INFO] 使用宿主机端口: \$HOST_PORT"
+                        # 注意: 端口占用检查移到"停止旧容器"阶段，避免重部署时误判正在运行的服务
+                        echo "[INFO] 使用宿主机端口: \$HOST_PORT（端口可用性将在停止旧容器阶段验证）"
 
                         # 覆写 docker-compose.yml
                         cat > ${PROJECT_DIR}/docker-compose.yml << COMPOSE_EOF
