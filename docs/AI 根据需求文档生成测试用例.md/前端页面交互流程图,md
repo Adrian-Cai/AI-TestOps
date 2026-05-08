@@ -1,0 +1,418 @@
+**前端页面交互流程图**
+
+> 用户输入需求片段 / 上传文件 → 解析 → 查看解析结果 → AI 生成测试用例 → 校验 → 人工编辑确认 → 保存 / 导出
+
+核心做成 **一个主页面 + 多步骤流程组件** 就够了
+
+---
+
+# 一、前端页面交互总流程图
+
+```mermaid
+flowchart TD
+
+    A[进入 AI 测试设计 Demo 页面] --> B[页面初始化]
+    B --> C[展示输入区域]
+
+    C --> D{用户选择输入方式}
+
+    D -->|输入需求片段| E[文本输入框]
+    D -->|上传文件| F[文件上传组件]
+
+    E --> E1[用户输入需求内容]
+    E1 --> E2[点击 下一步 / 开始解析]
+
+    F --> F1[选择文件]
+    F1 --> F2[前端校验文件类型]
+    F2 --> F3[前端校验文件大小]
+    F3 --> F4{校验是否通过}
+
+    F4 -->|否| F5[提示错误信息<br/>格式不支持或文件过大]
+    F5 --> F
+
+    F4 -->|是| F6[展示文件信息<br/>文件名 / 类型 / 大小]
+    F6 --> F7[点击 上传并解析]
+
+    E2 --> G[创建解析任务]
+    F7 --> G
+
+    G --> H[显示解析中状态<br/>Loading / 进度提示]
+    H --> I[调用后端解析接口]
+    I --> J{解析是否成功}
+
+    J -->|否| J1[展示解析失败原因]
+    J1 --> J2[用户重新输入或重新上传]
+    J2 --> C
+
+    J -->|是| K[展示解析结果页]
+    K --> K1[展示文档基础信息]
+    K --> K2[展示提取文本预览]
+    K --> K3[展示元数据]
+    K --> K4[展示分段 / 分块结果]
+
+    K --> L{用户是否确认解析结果}
+
+    L -->|否| L1[返回修改输入或重新上传]
+    L1 --> C
+
+    L -->|是| M[点击 AI 生成测试用例]
+
+    M --> N[显示生成中状态]
+    N --> O[调用 AI 用例生成接口]
+    O --> P{生成是否成功}
+
+    P -->|否| P1[展示生成失败原因]
+    P1 --> P2[允许重新生成]
+    P2 --> M
+
+    P -->|是| Q[展示测试用例列表]
+
+    Q --> Q1[用例卡片 / 表格展示]
+    Q --> Q2[展示标题 / 前置条件 / 步骤 / 预期结果]
+    Q --> Q3[展示优先级 / 关联需求 / 风险标签]
+    Q --> Q4[展示校验状态]
+
+    Q --> R[用户人工编辑用例]
+    R --> R1[编辑标题]
+    R --> R2[编辑前置条件]
+    R --> R3[编辑测试步骤]
+    R --> R4[编辑预期结果]
+    R --> R5[编辑优先级和风险标签]
+
+    R --> S[点击保存编辑]
+    S --> T[前端表单校验]
+    T --> U{校验是否通过}
+
+    U -->|否| U1[提示必填项缺失或格式错误]
+    U1 --> R
+
+    U -->|是| V[保存编辑后的用例]
+
+    V --> W{是否确认全部用例}
+
+    W -->|否| Q
+    W -->|是| X[点击确认入库]
+
+    X --> Y[调用确认接口]
+    Y --> Z[展示最终结果]
+
+    Z --> Z1[测试用例库]
+    Z --> Z2[需求-用例映射]
+    Z --> Z3[导出 Excel]
+    Z --> Z4[导出 JSON]
+```
+
+---
+
+# 二、推荐页面结构流程图
+
+页面分成 5 个步骤。
+
+```mermaid
+flowchart LR
+
+    A[Step 1<br/>输入需求或上传文件]
+    --> B[Step 2<br/>查看解析结果]
+    --> C[Step 3<br/>AI 生成测试用例]
+    --> D[Step 4<br/>人工编辑确认]
+    --> E[Step 5<br/>保存或导出]
+
+    A --> A1[文本输入框]
+    A --> A2[文件上传组件]
+    A --> A3[支持 md / txt / ppt / xls / pdf]
+
+    B --> B1[文档信息]
+    B --> B2[文本预览]
+    B --> B3[元数据展示]
+    B --> B4[分块结果]
+
+    C --> C1[生成按钮]
+    C --> C2[生成进度]
+    C --> C3[生成记录]
+    C --> C4[校验结果]
+
+    D --> D1[用例列表]
+    D --> D2[用例详情编辑]
+    D --> D3[新增 / 删除 / 修改]
+    D --> D4[确认 / 驳回 / 重新生成]
+
+    E --> E1[确认入库]
+    E --> E2[导出 Excel]
+    E --> E3[导出 JSON]
+```
+
+---
+
+# 三、页面状态流转图
+
+根据这个设计页面的 `status` 状态。
+
+```mermaid
+stateDiagram-v2
+
+    [*] --> INIT
+
+    INIT --> INPUT_READY: 页面加载完成
+
+    INPUT_READY --> TEXT_INPUTTING: 用户输入需求文本
+    INPUT_READY --> FILE_SELECTING: 用户选择上传文件
+
+    TEXT_INPUTTING --> READY_TO_PARSE: 文本内容不为空
+
+    FILE_SELECTING --> FILE_VALIDATING: 选择文件后
+    FILE_VALIDATING --> FILE_INVALID: 校验失败
+    FILE_INVALID --> FILE_SELECTING: 重新选择文件
+    FILE_VALIDATING --> READY_TO_PARSE: 校验通过
+
+    READY_TO_PARSE --> PARSING: 点击开始解析
+
+    PARSING --> PARSE_FAILED: 解析失败
+    PARSE_FAILED --> INPUT_READY: 重新输入或上传
+
+    PARSING --> PARSE_SUCCESS: 解析成功
+
+    PARSE_SUCCESS --> PARSE_REVIEWING: 展示解析结果
+    PARSE_REVIEWING --> INPUT_READY: 用户不确认，返回修改
+    PARSE_REVIEWING --> READY_TO_GENERATE: 用户确认解析结果
+
+    READY_TO_GENERATE --> GENERATING: 点击生成测试用例
+
+    GENERATING --> GENERATE_FAILED: 生成失败
+    GENERATE_FAILED --> READY_TO_GENERATE: 重新生成
+
+    GENERATING --> GENERATE_SUCCESS: 生成成功
+
+    GENERATE_SUCCESS --> CASE_REVIEWING: 展示测试用例列表
+
+    CASE_REVIEWING --> CASE_EDITING: 编辑用例
+    CASE_EDITING --> CASE_VALIDATING: 保存编辑
+
+    CASE_VALIDATING --> CASE_INVALID: 表单校验失败
+    CASE_INVALID --> CASE_EDITING: 继续修改
+
+    CASE_VALIDATING --> CASE_REVIEWING: 校验通过
+
+    CASE_REVIEWING --> READY_TO_CONFIRM: 所有用例确认完成
+
+    READY_TO_CONFIRM --> CONFIRMING: 点击确认入库
+
+    CONFIRMING --> CONFIRM_FAILED: 入库失败
+    CONFIRM_FAILED --> READY_TO_CONFIRM: 重新提交
+
+    CONFIRMING --> CONFIRMED: 入库成功
+
+    CONFIRMED --> EXPORTING: 点击导出
+    EXPORTING --> EXPORTED: 导出成功
+
+    CONFIRMED --> [*]
+    EXPORTED --> [*]
+```
+
+---
+
+# 四、单页面 UI 交互布局建议
+
+页面设计：
+
+```mermaid
+flowchart TD
+
+    A[页面顶部 Header<br/>AI 测试设计 Demo]
+
+    A --> B[步骤条 Stepper]
+    B --> B1[1 输入材料]
+    B --> B2[2 解析结果]
+    B --> B3[3 生成用例]
+    B --> B4[4 人工确认]
+    B --> B5[5 保存导出]
+
+    B --> C[主内容区]
+
+    C --> D[左侧输入区]
+    C --> E[右侧结果区]
+
+    D --> D1[文本输入 Tab]
+    D --> D2[文件上传 Tab]
+    D --> D3[解析按钮]
+
+    E --> E1[解析结果预览]
+    E --> E2[需求点列表]
+    E --> E3[测试用例列表]
+    E --> E4[用例详情编辑抽屉]
+
+    C --> F[底部操作栏]
+
+    F --> F1[上一步]
+    F --> F2[下一步]
+    F --> F3[重新生成]
+    F --> F4[确认入库]
+    F --> F5[导出 Excel / JSON]
+```
+
+---
+
+# 五、建议前端组件拆分
+
+用 React，都可以按这个组件结构拆。
+
+```mermaid
+flowchart TD
+
+    A[AITestDesignPage]
+
+    A --> B[StepHeader<br/>步骤条组件]
+    A --> C[InputPanel<br/>输入面板]
+    A --> D[ParseResultPanel<br/>解析结果面板]
+    A --> E[GenerationPanel<br/>AI 生成面板]
+    A --> F[TestCaseReviewPanel<br/>用例确认面板]
+    A --> G[FooterActions<br/>底部操作栏]
+
+    C --> C1[RequirementTextInput]
+    C --> C2[FileUploadBox]
+    C --> C3[FileInfoCard]
+
+    D --> D1[DocumentInfoCard]
+    D --> D2[MetadataViewer]
+    D --> D3[RawTextPreview]
+    D --> D4[ChunkList]
+
+    E --> E1[GenerateButton]
+    E --> E2[GenerationStatus]
+    E --> E3[ValidationResult]
+
+    F --> F1[TestCaseTable]
+    F --> F2[TestCaseDetailDrawer]
+    F --> F3[TestCaseStepEditor]
+    F --> F4[RiskTagSelector]
+    F --> F5[RequirementMappingViewer]
+
+    G --> G1[PrevButton]
+    G --> G2[NextButton]
+    G --> G3[RegenerateButton]
+    G --> G4[ConfirmButton]
+    G --> G5[ExportButton]
+```
+
+---
+
+# 六、核心交互动作设计
+
+按下面这几个按钮实现。
+
+| 操作       | 前端行为                            | 后端接口                                   |
+| -------- | ------------------------------- | -------------------------------------- |
+| 输入需求文本   | 保存到页面状态                         | 暂不请求                                   |
+| 上传文件     | 前端校验格式和大小                       | `/api/files/upload`                    |
+| 开始解析     | 显示解析中                           | `/api/documents/parse`                 |
+| 查看解析结果   | 渲染 raw_text、metadata、chunks     | `/api/documents/{document_id}`         |
+| 确认解析结果   | 进入生成步骤                          | `/api/documents/{document_id}/confirm` |
+| 生成测试用例   | 显示生成中                           | `/api/testcases/generate`              |
+| 重新生成     | 带上 document_id 和 prompt_version | `/api/testcases/regenerate`            |
+| 编辑用例     | 打开编辑抽屉                          | 前端本地状态                                 |
+| 保存编辑     | 校验后提交                           | `/api/testcases/{case_id}`             |
+| 确认入库     | 批量确认                            | `/api/testcases/confirm`               |
+| 导出 Excel | 下载文件                            | `/api/testcases/export/excel`          |
+| 导出 JSON  | 下载文件                            | `/api/testcases/export/json`           |
+
+---
+
+# 七、推荐页面数据状态
+
+前端页面可以维护这些状态。
+
+```ts
+type PageStatus =
+  | "INIT"
+  | "INPUT_READY"
+  | "PARSING"
+  | "PARSE_SUCCESS"
+  | "PARSE_FAILED"
+  | "GENERATING"
+  | "GENERATE_SUCCESS"
+  | "GENERATE_FAILED"
+  | "CASE_REVIEWING"
+  | "CASE_EDITING"
+  | "CONFIRMING"
+  | "CONFIRMED"
+  | "EXPORTING"
+  | "EXPORTED";
+```
+
+页面核心数据可以这样设计：
+
+```ts
+interface AITestDesignPageState {
+  currentStep: number;
+  pageStatus: PageStatus;
+
+  inputMode: "TEXT" | "FILE";
+
+  requirementText?: string;
+
+  uploadedFile?: {
+    fileName: string;
+    fileType: string;
+    fileSize: number;
+    filePath?: string;
+    fileHash?: string;
+  };
+
+  document?: {
+    documentId: string;
+    rawText: string;
+    metadata: Record<string, any>;
+    sections: DocumentSection[];
+    chunks: DocumentChunk[];
+    parseStatus: "PENDING" | "PROCESSING" | "SUCCESS" | "FAILED";
+  };
+
+  generation?: {
+    generationId: string;
+    modelName: string;
+    promptVersion: string;
+    status: "PENDING" | "SUCCESS" | "FAILED";
+    validationResult?: ValidationResult;
+  };
+
+  testCases: TestCase[];
+
+  selectedCaseId?: string;
+}
+```
+
+---
+
+# 八、最适合 Demo 的页面流程
+
+Demo 不建议一开始做很多页面。
+推荐就做一个页面，按步骤切换区域：
+
+```text
+AI 测试设计 Demo 页面
+├── 顶部：标题 + 步骤条
+├── Step 1：输入需求 / 上传文件
+├── Step 2：解析结果预览
+├── Step 3：AI 生成测试用例
+├── Step 4：人工编辑确认
+└── Step 5：保存 / 导出
+```
+
+这样最容易实现，也最适合演示。
+
+核心闭环是：
+
+```text
+输入材料
+  ↓
+解析材料
+  ↓
+生成用例
+  ↓
+人工编辑
+  ↓
+确认入库
+  ↓
+导出结果
+```
+
+
