@@ -60,6 +60,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -83,15 +85,13 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
     private final ObjectMapper objectMapper;
 
     @Override
-    @Transactional
     public DiffAnalysisTaskVO createAndAnalyze(DiffAnalysisTaskCreateRequest request) {
         validateCreateRequest(request);
         DiffAnalysisOptions options = normalizeOptions(request);
         assertNoRunningDuplicate(request);
-        AiTestopsDiffAnalysisTask task = createTask(request, options);
-        save(task);
+        AiTestopsDiffAnalysisTask task = createTaskAndSave(request, options);
         try {
-            runAnalysis(task, options);
+            runAnalysisAndSave(task, options);
             task = getById(task.getId());
         } catch (Exception ex) {
             log.warn("Diff 分析任务失败: taskId={}", task.getId(), ex);
@@ -130,10 +130,23 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
         AiTestopsDiffMergeGateReport report = reportService.getOne(new LambdaQueryWrapper<AiTestopsDiffMergeGateReport>()
                 .eq(AiTestopsDiffMergeGateReport::getTaskId, taskId)
                 .last("limit 1"), false);
+
+        List<Long> riskIds = risks.stream().map(AiTestopsDiffRiskItem::getId).toList();
+        Map<Long, List<AiTestopsDiffRiskCaseRel>> relationsByRiskId = riskIds.isEmpty()
+                ? Map.of()
+                : riskCaseRelService.list(new LambdaQueryWrapper<AiTestopsDiffRiskCaseRel>()
+                        .in(AiTestopsDiffRiskCaseRel::getRiskId, riskIds))
+                        .stream().collect(Collectors.groupingBy(AiTestopsDiffRiskCaseRel::getRiskId));
+        Set<Long> caseDbIds = relationsByRiskId.values().stream()
+                .flatMap(List::stream).map(AiTestopsDiffRiskCaseRel::getCaseId).filter(Objects::nonNull).collect(Collectors.toSet());
+        Map<Long, AiTestopsTestCase> testCaseMap = caseDbIds.isEmpty()
+                ? Map.of()
+                : testCaseService.listByIds(caseDbIds).stream().collect(Collectors.toMap(AiTestopsTestCase::getId, t -> t));
+
         DiffAnalysisReportVO vo = new DiffAnalysisReportVO();
         vo.setTask(toTaskVO(task));
         vo.setChangedFiles(files.stream().map(this::toFileVO).toList());
-        vo.setRiskList(risks.stream().map(this::toRiskVO).toList());
+        vo.setRiskList(risks.stream().map(r -> toRiskVO(r, relationsByRiskId.getOrDefault(r.getId(), List.of()), testCaseMap)).toList());
         vo.setReport(toReportVO(report));
         return vo;
     }
@@ -252,12 +265,17 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
         return vo;
     }
 
-    private void runAnalysis(AiTestopsDiffAnalysisTask task, DiffAnalysisOptions options) {
+    private void runAnalysisAndSave(AiTestopsDiffAnalysisTask task, DiffAnalysisOptions options) {
         updateStatus(task.getId(), DiffAnalysisTaskStatusEnum.RUNNING.name(), null);
         GitDiffResult diff = gitDiffClient.diff(task.getRepoUrl(), task.getSourceBranch(), task.getTargetBranch());
         task.setRepoName(diff.repoName());
         task.setBaseCommit(diff.baseCommit());
         task.setHeadCommit(diff.headCommit());
+        persistAnalysisResults(task, diff, options);
+    }
+
+    @Transactional
+    public void persistAnalysisResults(AiTestopsDiffAnalysisTask task, GitDiffResult diff, DiffAnalysisOptions options) {
         List<AiTestopsDiffChangedFile> files = saveChangedFiles(task, diff, options);
         List<AiTestopsDiffRiskItem> risks = ruleRiskService.buildRuleRisks(task, files);
         if (!risks.isEmpty()) {
@@ -331,7 +349,7 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
         report.setGateStatus(gate.name());
         report.setGateReason(buildGateReason(gate, risks));
         report.setChangedFileCount(files.size());
-        report.setChangedMethodCount(0);
+        report.setChangedMethodCount(null);
         report.setHighRiskCount(countRiskLevel(risks, DiffRiskLevelEnum.HIGH.name()));
         report.setMediumRiskCount(countRiskLevel(risks, DiffRiskLevelEnum.MEDIUM.name()));
         report.setLowRiskCount(countRiskLevel(risks, DiffRiskLevelEnum.LOW.name()));
@@ -350,7 +368,6 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
         update(new LambdaUpdateWrapper<AiTestopsDiffAnalysisTask>()
                 .eq(AiTestopsDiffAnalysisTask::getId, taskId)
                 .set(AiTestopsDiffAnalysisTask::getChangedFileCount, files.size())
-                .set(AiTestopsDiffAnalysisTask::getChangedMethodCount, 0)
                 .set(AiTestopsDiffAnalysisTask::getHighRiskCount, report.getHighRiskCount())
                 .set(AiTestopsDiffAnalysisTask::getMediumRiskCount, report.getMediumRiskCount())
                 .set(AiTestopsDiffAnalysisTask::getLowRiskCount, report.getLowRiskCount())
@@ -406,6 +423,13 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
         }
     }
 
+    @Transactional
+    public AiTestopsDiffAnalysisTask createTaskAndSave(DiffAnalysisTaskCreateRequest request, DiffAnalysisOptions options) {
+        AiTestopsDiffAnalysisTask task = createTask(request, options);
+        save(task);
+        return task;
+    }
+
     private AiTestopsDiffAnalysisTask createTask(DiffAnalysisTaskCreateRequest request, DiffAnalysisOptions options) {
         LocalDateTime now = LocalDateTime.now();
         AiTestopsDiffAnalysisTask task = new AiTestopsDiffAnalysisTask();
@@ -419,7 +443,7 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
         task.setAnalysisOptions(JsonUtil.toJson(objectMapper, options));
         task.setStatus(DiffAnalysisTaskStatusEnum.PENDING.name());
         task.setChangedFileCount(0);
-        task.setChangedMethodCount(0);
+        task.setChangedMethodCount(null);
         task.setHighRiskCount(0);
         task.setMediumRiskCount(0);
         task.setLowRiskCount(0);
@@ -507,7 +531,7 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
         return vo;
     }
 
-    private DiffRiskItemVO toRiskVO(AiTestopsDiffRiskItem risk) {
+    private DiffRiskItemVO toRiskVO(AiTestopsDiffRiskItem risk, List<AiTestopsDiffRiskCaseRel> relations, Map<Long, AiTestopsTestCase> testCaseMap) {
         DiffRiskItemVO vo = new DiffRiskItemVO();
         vo.setRiskId(risk.getId());
         vo.setRiskCode(risk.getRiskCode());
@@ -524,17 +548,15 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
         vo.setCoverageReason(risk.getCoverageReason());
         vo.setProcessStatus(risk.getProcessStatus());
         vo.setMergeGateImpact(risk.getMergeGateImpact());
-        List<AiTestopsDiffRiskCaseRel> relations = riskCaseRelService.list(new LambdaQueryWrapper<AiTestopsDiffRiskCaseRel>()
-                .eq(AiTestopsDiffRiskCaseRel::getRiskId, risk.getId()));
-        vo.setMatchedCases(relations.stream().map(this::toRiskCaseRelVO).toList());
+        vo.setMatchedCases(relations.stream().map(rel -> toRiskCaseRelVO(rel, testCaseMap)).toList());
         return vo;
     }
 
-    private DiffRiskCaseRelVO toRiskCaseRelVO(AiTestopsDiffRiskCaseRel rel) {
+    private DiffRiskCaseRelVO toRiskCaseRelVO(AiTestopsDiffRiskCaseRel rel, Map<Long, AiTestopsTestCase> testCaseMap) {
         DiffRiskCaseRelVO vo = new DiffRiskCaseRelVO();
         vo.setId(rel.getId());
         vo.setCaseDbId(rel.getCaseId());
-        AiTestopsTestCase testCase = testCaseService.getById(rel.getCaseId());
+        AiTestopsTestCase testCase = rel.getCaseId() != null ? testCaseMap.get(rel.getCaseId()) : null;
         if (testCase != null) {
             vo.setTestCaseId(testCase.getTestCaseId());
             vo.setCaseId(testCase.getCaseId());
@@ -598,10 +620,7 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
     }
 
     private String resolveRepoName(String repoUrl) {
-        String normalized = repoUrl.replace('\\', '/');
-        int slash = normalized.lastIndexOf('/');
-        String name = slash >= 0 ? normalized.substring(slash + 1) : normalized;
-        return name.endsWith(".git") ? name.substring(0, name.length() - 4) : name;
+        return GitDiffClient.resolveRepoName(repoUrl);
     }
 
     private int n(Integer value) {

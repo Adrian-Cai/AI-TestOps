@@ -119,7 +119,19 @@ public class DiffCoverageMatcher {
                 tokens.add(token);
             }
         }
+        String compact = normalized.replace(" ", "");
+        for (int i = 0; i < compact.length() - 1; i++) {
+            char c1 = compact.charAt(i);
+            char c2 = compact.charAt(i + 1);
+            if (isChinese(c1) || isChinese(c2)) {
+                tokens.add(compact.substring(i, i + 2));
+            }
+        }
         return tokens;
+    }
+
+    private boolean isChinese(char c) {
+        return Character.UnicodeScript.of(c) == Character.UnicodeScript.HAN;
     }
 
     private String buildJudgementReason(BigDecimal score, AiTestopsTestCase testCase) {

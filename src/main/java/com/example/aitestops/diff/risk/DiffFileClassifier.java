@@ -14,15 +14,26 @@ public class DiffFileClassifier {
             return DiffFileRoleEnum.OTHER;
         }
         String lower = path.toLowerCase(Locale.ROOT);
-        if (lower.contains("test")) return DiffFileRoleEnum.TEST;
-        if (lower.contains("auth") || lower.contains("security") || lower.contains("permission")) return DiffFileRoleEnum.AUTH;
-        if (lower.contains("controller")) return DiffFileRoleEnum.CONTROLLER;
-        if (lower.contains("service")) return DiffFileRoleEnum.SERVICE;
-        if (lower.contains("mapper") || lower.contains("dao") || lower.contains("repository")) return DiffFileRoleEnum.DAO;
+        String fileName = lower.contains("/") ? lower.substring(lower.lastIndexOf('/') + 1) : lower;
+        String dirPath = lower.contains("/") ? lower.substring(0, lower.lastIndexOf('/')) : "";
+        if (dirPath.contains("/test/") || dirPath.contains("/tests/") || dirPath.endsWith("/test")
+                || fileName.contains("test") && (fileName.endsWith(".java") || fileName.endsWith(".ts") || fileName.endsWith(".js"))) {
+            return DiffFileRoleEnum.TEST;
+        }
+        if (fileName.contains("auth") || fileName.contains("security") || fileName.contains("permission")
+                || dirPath.contains("/auth/") || dirPath.contains("/security/") || dirPath.contains("/permission/")) {
+            return DiffFileRoleEnum.AUTH;
+        }
+        if (fileName.endsWith("controller.java") || dirPath.contains("/controller/")) return DiffFileRoleEnum.CONTROLLER;
+        if (fileName.endsWith("service.java") || fileName.endsWith("serviceimpl.java") || dirPath.contains("/service/")) return DiffFileRoleEnum.SERVICE;
+        if (fileName.endsWith("mapper.java") || fileName.endsWith("dao.java") || fileName.endsWith("repository.java")
+                || dirPath.contains("/mapper/") || dirPath.contains("/dao/") || dirPath.contains("/repository/")) return DiffFileRoleEnum.DAO;
         if (lower.endsWith(".sql")) return DiffFileRoleEnum.SQL;
         if (lower.endsWith(".yml") || lower.endsWith(".yaml") || lower.endsWith(".properties")) return DiffFileRoleEnum.CONFIG;
-        if (lower.contains("job") || lower.contains("scheduler")) return DiffFileRoleEnum.JOB;
-        if (lower.contains("mq") || lower.contains("consumer") || lower.contains("producer")) return DiffFileRoleEnum.MQ;
+        if (fileName.endsWith("job.java") || fileName.endsWith("scheduler.java") || fileName.endsWith("task.java")
+                || dirPath.contains("/job/") || dirPath.contains("/scheduler/")) return DiffFileRoleEnum.JOB;
+        if (fileName.contains("mq") || fileName.contains("consumer") || fileName.contains("producer")
+                || dirPath.contains("/mq/") || dirPath.contains("/message/")) return DiffFileRoleEnum.MQ;
         return DiffFileRoleEnum.OTHER;
     }
 

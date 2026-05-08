@@ -56,9 +56,19 @@ public class GitDiffClient {
         }
     }
 
+    private static final List<String> ALLOWED_PROTOCOLS = List.of("https://", "http://", "git@", "ssh://", "git://");
+
     private void validateGitInput(String repoUrl, String sourceBranch, String targetBranch) {
         if (!StringUtils.hasText(repoUrl)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "仓库地址不能为空");
+        }
+        if (repoUrl.startsWith("-")) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "仓库地址格式不合法");
+        }
+        boolean isLocalPath = repoUrl.startsWith("/") || repoUrl.matches("[A-Za-z]:\\\\.*") || repoUrl.matches("[A-Za-z]:/.*");
+        boolean isAllowedProtocol = ALLOWED_PROTOCOLS.stream().anyMatch(repoUrl::startsWith);
+        if (!isLocalPath && !isAllowedProtocol) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "仓库地址仅支持 https、http、git@、ssh、git 协议或本地绝对路径");
         }
         if (!StringUtils.hasText(sourceBranch)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "源分支不能为空");
@@ -208,7 +218,7 @@ public class GitDiffClient {
         return "OTHER";
     }
 
-    private String resolveRepoName(String repoUrl) {
+    public static String resolveRepoName(String repoUrl) {
         String normalized = repoUrl.replace('\\', '/');
         int slash = normalized.lastIndexOf('/');
         String name = slash >= 0 ? normalized.substring(slash + 1) : normalized;
