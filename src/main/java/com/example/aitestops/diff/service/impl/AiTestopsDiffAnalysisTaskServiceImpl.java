@@ -7,7 +7,9 @@ import com.example.aitestops.ai.client.AiClient;
 import com.example.aitestops.ai.dto.AiChatRequest;
 import com.example.aitestops.ai.dto.AiChatResponse;
 import com.example.aitestops.ai.entity.AiTestopsGenerationRecord;
+import com.example.aitestops.ai.entity.AiTestopsRequirementExtract;
 import com.example.aitestops.ai.service.AiTestopsGenerationRecordService;
+import com.example.aitestops.ai.service.AiTestopsRequirementExtractService;
 import com.example.aitestops.common.config.AiModelProperties;
 import com.example.aitestops.common.enums.GenerationStatusEnum;
 import com.example.aitestops.common.enums.GenerationTypeEnum;
@@ -46,12 +48,15 @@ import com.example.aitestops.diff.service.AiTestopsDiffRiskActionRecordService;
 import com.example.aitestops.diff.service.AiTestopsDiffRiskCaseRelService;
 import com.example.aitestops.diff.service.AiTestopsDiffRiskItemService;
 import com.example.aitestops.diff.vo.DiffAnalysisReportVO;
+import com.example.aitestops.diff.vo.DiffAnalysisSourceVO;
 import com.example.aitestops.diff.vo.DiffAnalysisTaskVO;
 import com.example.aitestops.diff.vo.DiffChangedFileVO;
 import com.example.aitestops.diff.vo.DiffMergeGateReportVO;
 import com.example.aitestops.diff.vo.DiffRiskCaseRelVO;
 import com.example.aitestops.diff.vo.DiffRiskItemVO;
 import com.example.aitestops.diff.vo.DiffSupplementCaseVO;
+import com.example.aitestops.document.entity.AiTestopsDocument;
+import com.example.aitestops.document.service.AiTestopsDocumentService;
 import com.example.aitestops.testcase.entity.AiTestopsTestCase;
 import com.example.aitestops.testcase.entity.AiTestopsTestCaseDraft;
 import com.example.aitestops.testcase.service.AiTestopsTestCaseDraftService;
@@ -93,6 +98,8 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
     private final AiTestopsTestCaseService testCaseService;
     private final AiTestopsTestCaseDraftService draftService;
     private final AiTestopsGenerationRecordService generationRecordService;
+    private final AiTestopsRequirementExtractService requirementExtractService;
+    private final AiTestopsDocumentService documentService;
     private final AiClient aiClient;
     private final AiModelProperties aiModelProperties;
     private final ObjectMapper objectMapper;
@@ -100,6 +107,7 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
     @Override
     public DiffAnalysisTaskVO createAndAnalyze(DiffAnalysisTaskCreateRequest request) {
         validateCreateRequest(request);
+        resolveAnalysisSource(request);
         DiffAnalysisOptions options = normalizeOptions(request);
         assertNoRunningDuplicate(request);
         AiTestopsDiffAnalysisTask task = createTaskAndSave(request, options);
@@ -129,6 +137,23 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
         if (StringUtils.hasText(sourceBranch)) wrapper.eq(AiTestopsDiffAnalysisTask::getSourceBranch, sourceBranch);
         if (StringUtils.hasText(targetBranch)) wrapper.eq(AiTestopsDiffAnalysisTask::getTargetBranch, targetBranch);
         return list(wrapper).stream().map(this::toTaskVO).toList();
+    }
+
+    @Override
+    public List<DiffAnalysisSourceVO> listRecentSources(Integer limit) {
+        int size = limit == null ? 10 : Math.max(1, Math.min(limit, 50));
+        List<AiTestopsDocument> documents = documentService.list(new LambdaQueryWrapper<AiTestopsDocument>()
+                .orderByDesc(AiTestopsDocument::getCreatedAt)
+                .last("limit " + size));
+        return documents.stream().map(document -> {
+            AiTestopsRequirementExtract latestExtract = latestExtractByDocument(document.getDocumentId());
+            return toSourceVO(document, latestExtract);
+        }).toList();
+    }
+
+    @Override
+    public List<String> listRepositoryBranches(String repoUrl) {
+        return gitDiffClient.listBranches(repoUrl);
     }
 
     @Override
@@ -562,15 +587,91 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
 
     private void validateCreateRequest(DiffAnalysisTaskCreateRequest request) {
         if (request == null) throw new BusinessException(ErrorCode.BAD_REQUEST, "请求不能为空");
-        if (!StringUtils.hasText(request.getDocumentId()) && !StringUtils.hasText(request.getRequirementExtractId())) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "documentId 和 requirementExtractId 至少传一个");
-        }
         if (!StringUtils.hasText(request.getRepoUrl())) throw new BusinessException(ErrorCode.BAD_REQUEST, "仓库地址不能为空");
         if (!StringUtils.hasText(request.getSourceBranch())) throw new BusinessException(ErrorCode.BAD_REQUEST, "源分支不能为空");
         if (!StringUtils.hasText(request.getTargetBranch())) request.setTargetBranch("master");
         if (request.getSourceBranch().equals(request.getTargetBranch())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "源分支不能和目标分支相同");
         }
+    }
+
+    private void resolveAnalysisSource(DiffAnalysisTaskCreateRequest request) {
+        String documentId = trimToNull(request.getDocumentId());
+        String requirementExtractId = trimToNull(request.getRequirementExtractId());
+
+        if (requirementExtractId != null) {
+            AiTestopsRequirementExtract extract = requireRequirementExtract(requirementExtractId);
+            if (documentId != null && !documentId.equals(extract.getDocumentId())) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST,
+                        "需求解析结果不属于关联文档: requirementExtractId=" + requirementExtractId + ", documentId=" + documentId);
+            }
+            request.setDocumentId(extract.getDocumentId());
+            request.setRequirementExtractId(extract.getRequirementExtractId());
+            return;
+        }
+
+        if (documentId != null) {
+            AiTestopsDocument document = requireDocument(documentId);
+            AiTestopsRequirementExtract latestExtract = latestExtractByDocument(document.getDocumentId());
+            request.setDocumentId(document.getDocumentId());
+            request.setRequirementExtractId(latestExtract == null ? null : latestExtract.getRequirementExtractId());
+            return;
+        }
+
+        AiTestopsRequirementExtract latestExtract = latestRequirementExtract();
+        if (latestExtract != null) {
+            request.setDocumentId(latestExtract.getDocumentId());
+            request.setRequirementExtractId(latestExtract.getRequirementExtractId());
+            return;
+        }
+
+        AiTestopsDocument latestDocument = latestDocument();
+        if (latestDocument != null) {
+            request.setDocumentId(latestDocument.getDocumentId());
+            request.setRequirementExtractId(null);
+            return;
+        }
+
+        throw new BusinessException(ErrorCode.BAD_REQUEST, "请先创建并解析需求文档，或手动传入 documentId/requirementExtractId");
+    }
+
+    private AiTestopsDocument requireDocument(String documentId) {
+        AiTestopsDocument document = documentService.getOne(new LambdaQueryWrapper<AiTestopsDocument>()
+                .eq(AiTestopsDocument::getDocumentId, documentId)
+                .last("limit 1"), false);
+        if (document == null) {
+            throw new BusinessException(ErrorCode.DOCUMENT_NOT_FOUND, "文档不存在: " + documentId);
+        }
+        return document;
+    }
+
+    private AiTestopsRequirementExtract requireRequirementExtract(String requirementExtractId) {
+        AiTestopsRequirementExtract extract = requirementExtractService.getOne(new LambdaQueryWrapper<AiTestopsRequirementExtract>()
+                .eq(AiTestopsRequirementExtract::getRequirementExtractId, requirementExtractId)
+                .last("limit 1"), false);
+        if (extract == null) {
+            throw new BusinessException(ErrorCode.REQUIREMENT_EXTRACT_NOT_FOUND, "需求解析结果不存在: " + requirementExtractId);
+        }
+        return extract;
+    }
+
+    private AiTestopsRequirementExtract latestExtractByDocument(String documentId) {
+        return requirementExtractService.getOne(new LambdaQueryWrapper<AiTestopsRequirementExtract>()
+                .eq(AiTestopsRequirementExtract::getDocumentId, documentId)
+                .orderByDesc(AiTestopsRequirementExtract::getCreatedAt)
+                .last("limit 1"), false);
+    }
+
+    private AiTestopsRequirementExtract latestRequirementExtract() {
+        return requirementExtractService.getOne(new LambdaQueryWrapper<AiTestopsRequirementExtract>()
+                .orderByDesc(AiTestopsRequirementExtract::getCreatedAt)
+                .last("limit 1"), false);
+    }
+
+    private AiTestopsDocument latestDocument() {
+        return documentService.getOne(new LambdaQueryWrapper<AiTestopsDocument>()
+                .orderByDesc(AiTestopsDocument::getCreatedAt)
+                .last("limit 1"), false);
     }
 
     private DiffAnalysisOptions normalizeOptions(DiffAnalysisTaskCreateRequest request) {
@@ -679,6 +780,20 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
         vo.setMergeGateStatus(task.getMergeGateStatus());
         vo.setCreatedAt(task.getCreatedAt());
         vo.setUpdatedAt(task.getUpdatedAt());
+        return vo;
+    }
+
+    private DiffAnalysisSourceVO toSourceVO(AiTestopsDocument document, AiTestopsRequirementExtract extract) {
+        DiffAnalysisSourceVO vo = new DiffAnalysisSourceVO();
+        vo.setDocumentId(document.getDocumentId());
+        vo.setDocumentTitle(document.getTitle());
+        vo.setParseStatus(document.getParseStatus());
+        vo.setDocumentCreatedAt(document.getCreatedAt());
+        if (extract != null) {
+            vo.setRequirementExtractId(extract.getRequirementExtractId());
+            vo.setGenerationId(extract.getGenerationId());
+            vo.setRequirementExtractCreatedAt(extract.getCreatedAt());
+        }
         return vo;
     }
 
@@ -804,5 +919,12 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
 
     private String nullToEmpty(String value) {
         return value == null ? "" : value;
+    }
+
+    private String trimToNull(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        return value.trim();
     }
 }

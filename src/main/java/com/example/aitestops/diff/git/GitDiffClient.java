@@ -73,21 +73,28 @@ public class GitDiffClient {
         }
     }
 
-    private void validateGitInput(String repoUrl, String sourceBranch, String targetBranch) {
-        if (!StringUtils.hasText(repoUrl)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "仓库地址不能为空");
-        }
-        if (repoUrl.startsWith("-")) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "仓库地址格式不合法");
-        }
-        boolean isLocalPath = repoUrl.startsWith("/") || repoUrl.matches("[A-Za-z]:\\\\.*") || repoUrl.matches("[A-Za-z]:/.*");
-        if (isLocalPath) {
-            if (!allowLocalRepository) {
-                throw new BusinessException(ErrorCode.BAD_REQUEST, "本地仓库路径未启用");
+    public List<String> listBranches(String repoUrl) {
+        validateRepositoryUrl(repoUrl);
+        try {
+            if (isLocalPath(repoUrl)) {
+                Path repoDir = Path.of(repoUrl).toAbsolutePath().normalize();
+                if (!Files.exists(repoDir.resolve(".git"))) {
+                    throw new BusinessException(ErrorCode.BAD_REQUEST, "本地仓库路径不是有效 Git 仓库");
+                }
+                return parseLocalBranches(runGit(repoDir, "branch", "--format=%(refname:short)"));
             }
-        } else {
-            validateRemoteRepositoryUrl(repoUrl);
+            return parseRemoteBranches(runCommand(Path.of(".").toAbsolutePath().normalize(),
+                    List.of("git", "ls-remote", "--heads", repoUrl)));
+        } catch (BusinessException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            log.warn("Git branch list failed: repoUrl={}", repoUrl, ex);
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Git 分支列表获取失败: " + ex.getMessage(), ex);
         }
+    }
+
+    private void validateGitInput(String repoUrl, String sourceBranch, String targetBranch) {
+        validateRepositoryUrl(repoUrl);
         if (!StringUtils.hasText(sourceBranch)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "源分支不能为空");
         }
@@ -97,9 +104,32 @@ public class GitDiffClient {
         if (sourceBranch.equals(targetBranch)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "源分支不能和目标分支相同");
         }
-        if (repoUrl.length() > 500 || sourceBranch.length() > 255 || targetBranch.length() > 255) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "仓库地址或分支名称过长");
+        if (sourceBranch.length() > 255 || targetBranch.length() > 255) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "分支名称过长");
         }
+    }
+
+    private void validateRepositoryUrl(String repoUrl) {
+        if (!StringUtils.hasText(repoUrl)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "仓库地址不能为空");
+        }
+        if (repoUrl.startsWith("-")) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "仓库地址格式不合法");
+        }
+        if (isLocalPath(repoUrl)) {
+            if (!allowLocalRepository) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST, "本地仓库路径未启用");
+            }
+        } else {
+            validateRemoteRepositoryUrl(repoUrl);
+        }
+        if (repoUrl.length() > 500) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "仓库地址过长");
+        }
+    }
+
+    private boolean isLocalPath(String repoUrl) {
+        return repoUrl.startsWith("/") || repoUrl.matches("[A-Za-z]:\\\\.*") || repoUrl.matches("[A-Za-z]:/.*");
     }
 
     private void validateRemoteRepositoryUrl(String repoUrl) {
@@ -221,6 +251,27 @@ public class GitDiffClient {
             }
         }
         return items;
+    }
+
+    private List<String> parseRemoteBranches(String output) {
+        return output.lines()
+                .map(line -> {
+                    int index = line.indexOf("refs/heads/");
+                    return index >= 0 ? line.substring(index + "refs/heads/".length()).trim() : "";
+                })
+                .filter(StringUtils::hasText)
+                .distinct()
+                .sorted()
+                .toList();
+    }
+
+    private List<String> parseLocalBranches(String output) {
+        return output.lines()
+                .map(String::trim)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .sorted()
+                .toList();
     }
 
     private Map<String, NumStat> parseNumStat(String output) {

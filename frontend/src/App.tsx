@@ -1,5 +1,6 @@
 import {
   Alert,
+  AutoComplete,
   Badge,
   Button,
   Card,
@@ -64,6 +65,7 @@ import type {
   DocumentParseSummaryVO,
   DocumentVO,
   DiffAnalysisReportVO,
+  DiffAnalysisSourceVO,
   DiffAnalysisTaskVO,
   DiffChangedFileVO,
   DiffRiskItemVO,
@@ -184,6 +186,8 @@ function App() {
   const [draftForm] = Form.useForm();
   const [diffForm] = Form.useForm();
   const [diffTasks, setDiffTasks] = useState<DiffAnalysisTaskVO[]>([]);
+  const [diffSources, setDiffSources] = useState<DiffAnalysisSourceVO[]>([]);
+  const [diffBranches, setDiffBranches] = useState<string[]>([]);
   const [diffReport, setDiffReport] = useState<DiffAnalysisReportVO | null>(null);
   const [activeDiffFile, setActiveDiffFile] = useState<DiffChangedFileVO | null>(null);
 
@@ -391,10 +395,41 @@ function App() {
   };
 
   const refreshDiffTasks = async () => {
+    const selectedDocumentId = diffForm.getFieldValue("documentId") || documentId;
+    const selectedRequirementExtractId = diffForm.getFieldValue("requirementExtractId") || requirementExtract?.requirementExtractId;
     const data = await runAction("diff-list", "查询 Diff 分析任务", () =>
-      api.listDiffTasks({ documentId, requirementExtractId: requirementExtract?.requirementExtractId })
+      api.listDiffTasks({ documentId: selectedDocumentId, requirementExtractId: selectedRequirementExtractId })
     );
     if (data) setDiffTasks(data);
+  };
+
+  const refreshDiffSources = async () => {
+    const data = await runAction("diff-sources", "查询最近需求来源", () => api.listDiffSources(10));
+    if (data) {
+      setDiffSources(data);
+      const currentDocumentId = diffForm.getFieldValue("documentId") || documentId;
+      if (!currentDocumentId && data[0]) {
+        diffForm.setFieldsValue({
+          documentId: data[0].documentId,
+          requirementExtractId: data[0].requirementExtractId
+        });
+      }
+    }
+  };
+
+  const refreshRepositoryBranches = async () => {
+    const repoUrl = diffForm.getFieldValue("repoUrl");
+    if (!repoUrl) {
+      messageApi.warning("请先输入仓库地址");
+      return;
+    }
+    const data = await runAction("diff-branches", "查询仓库分支", () => api.listRepositoryBranches(repoUrl));
+    if (data) {
+      setDiffBranches(data);
+      if (!diffForm.getFieldValue("targetBranch")) {
+        diffForm.setFieldValue("targetBranch", data.includes("master") ? "master" : data.includes("main") ? "main" : data[0]);
+      }
+    }
   };
 
   const loadDiffReport = async (taskId: number) => {
@@ -1127,6 +1162,12 @@ function App() {
   }
 
   function renderDiffStep() {
+    const sourceOptions = diffSources.map((source) => ({
+      value: source.documentId,
+      label: `${source.documentTitle || source.documentId} / ${source.requirementExtractId || "无需求解析结果"}`
+    }));
+    const branchOptions = diffBranches.map((branch) => ({ value: branch }));
+
     const taskColumns: ColumnsType<DiffAnalysisTaskVO> = [
       { title: "任务编码", dataIndex: "taskCode", width: 180 },
       { title: "仓库", dataIndex: "repoName", width: 160, render: (value, record) => value || record.repoUrl },
@@ -1216,29 +1257,61 @@ function App() {
             }}
           >
             <Row gutter={[16, 0]}>
+              <Col xs={24}>
+                <Form.Item label="最近需求来源">
+                  <Select
+                    allowClear
+                    showSearch
+                    placeholder="可选择最近一次文档和需求解析结果"
+                    options={sourceOptions}
+                    optionFilterProp="label"
+                    onChange={(value) => {
+                      const source = diffSources.find((item) => item.documentId === value);
+                      if (source) {
+                        diffForm.setFieldsValue({
+                          documentId: source.documentId,
+                          requirementExtractId: source.requirementExtractId
+                        });
+                      }
+                    }}
+                    dropdownRender={(menu) => (
+                      <>
+                        {menu}
+                        <Divider style={{ margin: "8px 0" }} />
+                        <Button type="link" icon={<ReloadOutlined />} loading={busy === "diff-sources"} onClick={refreshDiffSources}>
+                          刷新最近来源
+                        </Button>
+                      </>
+                    )}
+                  />
+                </Form.Item>
+              </Col>
               <Col xs={24} md={12}>
                 <Form.Item name="documentId" label="关联文档">
-                  <Input placeholder={documentId || "Document ID"} />
+                  <Input placeholder={documentId || "留空时自动使用最近一次需求来源"} />
                 </Form.Item>
               </Col>
               <Col xs={24} md={12}>
                 <Form.Item name="requirementExtractId" label="需求解析结果">
-                  <Input placeholder={requirementExtract?.requirementExtractId || "Requirement Extract ID"} />
+                  <Input placeholder={requirementExtract?.requirementExtractId || "留空时自动匹配文档最近一次解析结果"} />
                 </Form.Item>
               </Col>
               <Col xs={24}>
                 <Form.Item name="repoUrl" label="仓库地址" rules={[{ required: true, message: "请输入 Git 仓库地址或本地仓库路径" }]}>
-                  <Input placeholder="D:/AllProject/AI-TestOps 或 git@github.com:org/repo.git" />
+                  <Input placeholder="https://github.com/acai1998/AI-TestOps.git" />
+                </Form.Item>
+                <Button icon={<ReloadOutlined />} loading={busy === "diff-branches"} onClick={refreshRepositoryBranches}>
+                  获取仓库分支
+                </Button>
+              </Col>
+              <Col xs={24} md={12}>
+                <Form.Item name="sourceBranch" label="变更分支（待分析）" rules={[{ required: true, message: "请输入变更分支" }]}>
+                  <AutoComplete options={branchOptions} placeholder="feature/diff-analysis-task" filterOption />
                 </Form.Item>
               </Col>
               <Col xs={24} md={12}>
-                <Form.Item name="sourceBranch" label="源分支" rules={[{ required: true, message: "请输入源分支" }]}>
-                  <Input placeholder="feature/diff-analysis" />
-                </Form.Item>
-              </Col>
-              <Col xs={24} md={12}>
-                <Form.Item name="targetBranch" label="目标分支">
-                  <Input placeholder="master" />
+                <Form.Item name="targetBranch" label="基准分支（主分支）">
+                  <AutoComplete options={branchOptions} placeholder="master 或 main" filterOption />
                 </Form.Item>
               </Col>
               <Col xs={24}>

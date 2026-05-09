@@ -4,6 +4,7 @@ import type {
   DocumentParseSummaryVO,
   DocumentVO,
   DiffAnalysisReportVO,
+  DiffAnalysisSourceVO,
   DiffAnalysisTaskVO,
   DiffSupplementCaseVO,
   GenerationRecordVO,
@@ -154,6 +155,13 @@ export const api = {
     if (input.status) query.set("status", input.status);
     const suffix = query.toString() ? `?${query}` : "";
     return requestJson<DiffAnalysisTaskVO[]>(`/api/ai-testops/diff-analysis/tasks${suffix}`);
+  },
+  listDiffSources(limit = 10) {
+    return requestJson<DiffAnalysisSourceVO[]>(`/api/ai-testops/diff-analysis/sources/recent?limit=${encodeURIComponent(String(limit))}`);
+  },
+  listRepositoryBranches(repoUrl: string) {
+    const query = new URLSearchParams({ repoUrl });
+    return requestJson<string[]>(`/api/ai-testops/diff-analysis/repositories/branches?${query}`);
   },
   getDiffReport(taskId: number) {
     return requestJson<DiffAnalysisReportVO>(`/api/ai-testops/diff-analysis/tasks/${encodeURIComponent(String(taskId))}/report`);

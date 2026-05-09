@@ -2,14 +2,20 @@ package com.example.aitestops.diff;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.example.aitestops.ai.entity.AiTestopsGenerationRecord;
+import com.example.aitestops.ai.entity.AiTestopsRequirementExtract;
 import com.example.aitestops.ai.service.AiTestopsGenerationRecordService;
+import com.example.aitestops.ai.service.AiTestopsRequirementExtractService;
 import com.example.aitestops.common.enums.GenerationTypeEnum;
+import com.example.aitestops.common.exception.BusinessException;
 import com.example.aitestops.diff.dto.DiffAnalysisOptions;
 import com.example.aitestops.diff.dto.DiffAnalysisTaskCreateRequest;
 import com.example.aitestops.diff.dto.DiffRiskActionRequest;
 import com.example.aitestops.diff.service.AiTestopsDiffAnalysisTaskService;
 import com.example.aitestops.diff.vo.DiffAnalysisReportVO;
+import com.example.aitestops.diff.vo.DiffAnalysisSourceVO;
 import com.example.aitestops.diff.vo.DiffAnalysisTaskVO;
+import com.example.aitestops.document.entity.AiTestopsDocument;
+import com.example.aitestops.document.service.AiTestopsDocumentService;
 import com.example.aitestops.testcase.entity.AiTestopsTestCase;
 import com.example.aitestops.testcase.entity.AiTestopsTestCaseDraft;
 import com.example.aitestops.testcase.service.AiTestopsTestCaseDraftService;
@@ -27,6 +33,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
 @ActiveProfiles("test")
@@ -43,6 +50,12 @@ class AiTestopsDiffAnalysisServiceIntegrationTest {
 
     @Autowired
     private AiTestopsGenerationRecordService generationRecordService;
+
+    @Autowired
+    private AiTestopsDocumentService documentService;
+
+    @Autowired
+    private AiTestopsRequirementExtractService requirementExtractService;
 
     @TempDir
     Path tempDir;
@@ -138,6 +151,56 @@ class AiTestopsDiffAnalysisServiceIntegrationTest {
         assertThat(generationCount).isEqualTo(1);
     }
 
+    @Test
+    void createAndAnalyzeShouldUseLatestRequirementExtractWhenSourceIdsAreMissing() throws Exception {
+        Path repo = createLocalRepositoryWithFeatureDiff("repo-latest-source");
+        saveDocument("DOC_DIFF_LATEST", "最近需求文档");
+        saveRequirementExtract("REXT_DIFF_LATEST", "DOC_DIFF_LATEST", LocalDateTime.now().plusDays(1));
+        DiffAnalysisTaskCreateRequest request = baseRequest(repo, null, null);
+
+        DiffAnalysisTaskVO task = diffAnalysisTaskService.createAndAnalyze(request);
+
+        assertThat(task.getStatus()).isEqualTo("SUCCESS");
+        assertThat(task.getDocumentId()).isEqualTo("DOC_DIFF_LATEST");
+        assertThat(task.getRequirementExtractId()).isEqualTo("REXT_DIFF_LATEST");
+    }
+
+    @Test
+    void createAndAnalyzeShouldRejectRequirementExtractFromDifferentDocument() throws Exception {
+        Path repo = createLocalRepositoryWithFeatureDiff("repo-mismatch-source");
+        saveDocument("DOC_DIFF_SOURCE_A", "文档 A");
+        saveDocument("DOC_DIFF_SOURCE_B", "文档 B");
+        saveRequirementExtract("REXT_DIFF_SOURCE_B", "DOC_DIFF_SOURCE_B", LocalDateTime.now());
+        DiffAnalysisTaskCreateRequest request = baseRequest(repo, "DOC_DIFF_SOURCE_A", "REXT_DIFF_SOURCE_B");
+
+        assertThatThrownBy(() -> diffAnalysisTaskService.createAndAnalyze(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("需求解析结果不属于关联文档");
+    }
+
+    @Test
+    void listRecentSourcesShouldReturnDocumentsWithLatestRequirementExtract() {
+        saveDocument("DOC_DIFF_RECENT", "最近来源");
+        saveRequirementExtract("REXT_DIFF_OLD", "DOC_DIFF_RECENT", LocalDateTime.now().minusHours(1));
+        saveRequirementExtract("REXT_DIFF_NEW", "DOC_DIFF_RECENT", LocalDateTime.now());
+
+        List<DiffAnalysisSourceVO> sources = diffAnalysisTaskService.listRecentSources(5);
+
+        assertThat(sources).anySatisfy(source -> {
+            assertThat(source.getDocumentId()).isEqualTo("DOC_DIFF_RECENT");
+            assertThat(source.getRequirementExtractId()).isEqualTo("REXT_DIFF_NEW");
+        });
+    }
+
+    @Test
+    void listRepositoryBranchesShouldReturnLocalRepositoryBranches() throws Exception {
+        Path repo = createLocalRepositoryWithFeatureDiff("repo-branches");
+
+        List<String> branches = diffAnalysisTaskService.listRepositoryBranches(repo.toString());
+
+        assertThat(branches).contains("master", "feature/diff-risk");
+    }
+
     private DiffAnalysisTaskCreateRequest baseRequest(Path repo, String documentId, String requirementExtractId) {
         DiffAnalysisTaskCreateRequest request = new DiffAnalysisTaskCreateRequest();
         request.setDocumentId(documentId);
@@ -192,6 +255,37 @@ class AiTestopsDiffAnalysisServiceIntegrationTest {
         testCase.setUpdatedAt(LocalDateTime.now());
         testCaseService.save(testCase);
         return testCase;
+    }
+
+    private void saveDocument(String documentId, String title) {
+        AiTestopsDocument document = new AiTestopsDocument();
+        document.setDocumentId(documentId);
+        document.setTitle(title);
+        document.setSourceType("TEXT");
+        document.setRawText("需求内容");
+        document.setParseStatus("SUCCESS");
+        document.setUploadedAt(LocalDateTime.now());
+        document.setParsedAt(LocalDateTime.now());
+        document.setCreatedAt(LocalDateTime.now());
+        document.setUpdatedAt(LocalDateTime.now());
+        documentService.save(document);
+    }
+
+    private void saveRequirementExtract(String requirementExtractId, String documentId, LocalDateTime createdAt) {
+        AiTestopsRequirementExtract extract = new AiTestopsRequirementExtract();
+        extract.setRequirementExtractId(requirementExtractId);
+        extract.setGenerationId("GEN_" + requirementExtractId);
+        extract.setDocumentId(documentId);
+        extract.setRequirementsJson("[]");
+        extract.setBusinessRulesJson("[]");
+        extract.setApiListJson("[]");
+        extract.setFieldConstraintsJson("[]");
+        extract.setExceptionCasesJson("[]");
+        extract.setRisksJson("[]");
+        extract.setRawOutputJson("{}");
+        extract.setCreatedAt(createdAt);
+        extract.setUpdatedAt(createdAt);
+        requirementExtractService.save(extract);
     }
 
     private void run(Path workdir, String... command) throws Exception {

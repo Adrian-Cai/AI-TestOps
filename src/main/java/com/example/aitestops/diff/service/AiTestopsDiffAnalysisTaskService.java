@@ -6,6 +6,7 @@ import com.example.aitestops.diff.dto.DiffRiskActionRequest;
 import com.example.aitestops.diff.dto.DiffRiskVerifyRequest;
 import com.example.aitestops.diff.entity.AiTestopsDiffAnalysisTask;
 import com.example.aitestops.diff.vo.DiffAnalysisReportVO;
+import com.example.aitestops.diff.vo.DiffAnalysisSourceVO;
 import com.example.aitestops.diff.vo.DiffAnalysisTaskVO;
 import com.example.aitestops.diff.vo.DiffSupplementCaseVO;
 
@@ -17,6 +18,10 @@ public interface AiTestopsDiffAnalysisTaskService extends IService<AiTestopsDiff
 
     List<DiffAnalysisTaskVO> listTasks(String documentId, String requirementExtractId, String status,
                                        String sourceBranch, String targetBranch);
+
+    List<DiffAnalysisSourceVO> listRecentSources(Integer limit);
+
+    List<String> listRepositoryBranches(String repoUrl);
 
     DiffAnalysisReportVO getReport(Long taskId);
 

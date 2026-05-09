@@ -6,6 +6,7 @@ import com.example.aitestops.diff.dto.DiffRiskActionRequest;
 import com.example.aitestops.diff.dto.DiffRiskVerifyRequest;
 import com.example.aitestops.diff.service.AiTestopsDiffAnalysisTaskService;
 import com.example.aitestops.diff.vo.DiffAnalysisReportVO;
+import com.example.aitestops.diff.vo.DiffAnalysisSourceVO;
 import com.example.aitestops.diff.vo.DiffAnalysisTaskVO;
 import com.example.aitestops.diff.vo.DiffSupplementCaseVO;
 import io.swagger.v3.oas.annotations.Operation;
@@ -43,6 +44,18 @@ public class AiTestopsDiffAnalysisController {
                                                            @RequestParam(required = false) String sourceBranch,
                                                            @RequestParam(required = false) String targetBranch) {
         return ApiResponse.success(diffAnalysisTaskService.listTasks(documentId, requirementExtractId, status, sourceBranch, targetBranch));
+    }
+
+    @GetMapping("/sources/recent")
+    @Operation(summary = "查询最近可用于 Diff 分析的需求来源")
+    public ApiResponse<List<DiffAnalysisSourceVO>> listRecentSources(@RequestParam(required = false) Integer limit) {
+        return ApiResponse.success(diffAnalysisTaskService.listRecentSources(limit));
+    }
+
+    @GetMapping("/repositories/branches")
+    @Operation(summary = "查询 Git 仓库分支列表")
+    public ApiResponse<List<String>> listRepositoryBranches(@RequestParam String repoUrl) {
+        return ApiResponse.success(diffAnalysisTaskService.listRepositoryBranches(repoUrl));
     }
 
     @GetMapping("/tasks/{taskId}/report")

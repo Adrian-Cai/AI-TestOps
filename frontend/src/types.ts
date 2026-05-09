@@ -167,6 +167,16 @@ export interface DiffAnalysisTaskVO {
   updatedAt?: string;
 }
 
+export interface DiffAnalysisSourceVO {
+  documentId: string;
+  documentTitle?: string;
+  parseStatus?: string;
+  requirementExtractId?: string;
+  generationId?: string;
+  documentCreatedAt?: string;
+  requirementExtractCreatedAt?: string;
+}
+
 export interface DiffChangedFileVO {
   changedFileId: number;
   oldFilePath?: string;
