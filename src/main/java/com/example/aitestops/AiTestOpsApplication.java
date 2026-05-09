@@ -14,7 +14,8 @@ import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
         "com.example.aitestops.document.mapper",
         "com.example.aitestops.ai.mapper",
         "com.example.aitestops.testcase.mapper",
-        "com.example.aitestops.review.mapper"
+        "com.example.aitestops.review.mapper",
+        "com.example.aitestops.diff.mapper"
 })
 public class AiTestOpsApplication {
 
