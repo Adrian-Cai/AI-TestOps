@@ -1,11 +1,18 @@
 package com.example.aitestops.diff;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.example.aitestops.ai.entity.AiTestopsGenerationRecord;
+import com.example.aitestops.ai.service.AiTestopsGenerationRecordService;
+import com.example.aitestops.common.enums.GenerationTypeEnum;
 import com.example.aitestops.diff.dto.DiffAnalysisOptions;
 import com.example.aitestops.diff.dto.DiffAnalysisTaskCreateRequest;
+import com.example.aitestops.diff.dto.DiffRiskActionRequest;
 import com.example.aitestops.diff.service.AiTestopsDiffAnalysisTaskService;
 import com.example.aitestops.diff.vo.DiffAnalysisReportVO;
 import com.example.aitestops.diff.vo.DiffAnalysisTaskVO;
 import com.example.aitestops.testcase.entity.AiTestopsTestCase;
+import com.example.aitestops.testcase.entity.AiTestopsTestCaseDraft;
+import com.example.aitestops.testcase.service.AiTestopsTestCaseDraftService;
 import com.example.aitestops.testcase.service.AiTestopsTestCaseService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -30,6 +37,12 @@ class AiTestopsDiffAnalysisServiceIntegrationTest {
 
     @Autowired
     private AiTestopsTestCaseService testCaseService;
+
+    @Autowired
+    private AiTestopsTestCaseDraftService draftService;
+
+    @Autowired
+    private AiTestopsGenerationRecordService generationRecordService;
 
     @TempDir
     Path tempDir;
@@ -68,6 +81,63 @@ class AiTestopsDiffAnalysisServiceIntegrationTest {
         assertThat(report.getRiskList().get(0).getCoverageStatus()).isIn("COVERED", "PARTIAL_COVERED");
     }
 
+    @Test
+    void linkCaseActionShouldCreateRiskCaseRelationAndUpdateCoverage() throws Exception {
+        Path repo = createLocalRepositoryWithFeatureDiff("repo-link-case");
+        AiTestopsTestCase testCase = saveFormalCase("TCDB_DIFF_LINK", "DOC_DIFF_LINK", "REXT_DIFF_LINK",
+                "Manual regression case", "[\"manual\"]");
+        DiffAnalysisTaskCreateRequest request = baseRequest(repo, "DOC_DIFF_LINK", "REXT_DIFF_LINK");
+        request.getAnalysisOptions().setEnableCoverageCheck(false);
+
+        DiffAnalysisReportVO report = diffAnalysisTaskService.getReport(diffAnalysisTaskService.createAndAnalyze(request).getTaskId());
+        Long riskId = report.getRiskList().get(0).getRiskId();
+        DiffRiskActionRequest actionRequest = new DiffRiskActionRequest();
+        actionRequest.setActionType("LINK_CASE");
+        actionRequest.setRelatedCaseIds(List.of(testCase.getId()));
+        actionRequest.setOperator("qa");
+
+        diffAnalysisTaskService.applyRiskAction(riskId, actionRequest);
+        DiffAnalysisReportVO updated = diffAnalysisTaskService.getReport(report.getTask().getTaskId());
+
+        assertThat(updated.getRiskList().get(0).getCoverageStatus()).isEqualTo("COVERED");
+        assertThat(updated.getRiskList().get(0).getProcessStatus()).isEqualTo("WAIT_TEST");
+        assertThat(updated.getRiskList().get(0).getMatchedCases())
+                .extracting("caseDbId")
+                .contains(testCase.getId());
+    }
+
+    @Test
+    void autoGenerateSupplementCasesShouldCreateDraftForUncoveredRisk() throws Exception {
+        Path repo = createLocalRepositoryWithFeatureDiff("repo-auto-supplement");
+        DiffAnalysisTaskCreateRequest request = baseRequest(repo, "DOC_DIFF_AUTO_CASE", "REXT_DIFF_AUTO_CASE");
+        request.getAnalysisOptions().setAutoGenerateSupplementCases(true);
+
+        DiffAnalysisReportVO report = diffAnalysisTaskService.getReport(diffAnalysisTaskService.createAndAnalyze(request).getTaskId());
+        long draftCount = draftService.count(new LambdaQueryWrapper<AiTestopsTestCaseDraft>()
+                .eq(AiTestopsTestCaseDraft::getDocumentId, "DOC_DIFF_AUTO_CASE")
+                .eq(AiTestopsTestCaseDraft::getCaseType, "DIFF_SUPPLEMENT"));
+
+        assertThat(report.getRiskList()).hasSize(1);
+        assertThat(report.getRiskList().get(0).getCoverageStatus()).isEqualTo("NOT_COVERED");
+        assertThat(report.getRiskList().get(0).getProcessStatus()).isEqualTo("WAIT_TEST");
+        assertThat(draftCount).isEqualTo(1);
+    }
+
+    @Test
+    void enableAiAnalysisShouldPersistGenerationRecordWithoutChangingRuleRiskFlow() throws Exception {
+        Path repo = createLocalRepositoryWithFeatureDiff("repo-ai-analysis-record");
+        DiffAnalysisTaskCreateRequest request = baseRequest(repo, "DOC_DIFF_AI", "REXT_DIFF_AI");
+        request.getAnalysisOptions().setEnableAiAnalysis(true);
+
+        DiffAnalysisTaskVO task = diffAnalysisTaskService.createAndAnalyze(request);
+        long generationCount = generationRecordService.count(new LambdaQueryWrapper<AiTestopsGenerationRecord>()
+                .eq(AiTestopsGenerationRecord::getDocumentId, "DOC_DIFF_AI")
+                .eq(AiTestopsGenerationRecord::getGenerationType, GenerationTypeEnum.DIFF_RISK_ANALYSIS.name()));
+
+        assertThat(task.getStatus()).isEqualTo("SUCCESS");
+        assertThat(generationCount).isEqualTo(1);
+    }
+
     private DiffAnalysisTaskCreateRequest baseRequest(Path repo, String documentId, String requirementExtractId) {
         DiffAnalysisTaskCreateRequest request = new DiffAnalysisTaskCreateRequest();
         request.setDocumentId(documentId);
@@ -100,7 +170,7 @@ class AiTestopsDiffAnalysisServiceIntegrationTest {
         return repo;
     }
 
-    private void saveFormalCase(String testCaseId, String documentId, String requirementExtractId, String title, String riskTagsJson) {
+    private AiTestopsTestCase saveFormalCase(String testCaseId, String documentId, String requirementExtractId, String title, String riskTagsJson) {
         AiTestopsTestCase testCase = new AiTestopsTestCase();
         testCase.setTestCaseId(testCaseId);
         testCase.setSourceDraftCaseId("DRAFT_" + testCaseId);
@@ -121,6 +191,7 @@ class AiTestopsDiffAnalysisServiceIntegrationTest {
         testCase.setCreatedAt(LocalDateTime.now());
         testCase.setUpdatedAt(LocalDateTime.now());
         testCaseService.save(testCase);
+        return testCase;
     }
 
     private void run(Path workdir, String... command) throws Exception {

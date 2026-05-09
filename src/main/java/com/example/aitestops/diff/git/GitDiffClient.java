@@ -4,28 +4,45 @@ import com.example.aitestops.common.exception.BusinessException;
 import com.example.aitestops.common.exception.ErrorCode;
 import com.example.aitestops.diff.enums.DiffChangeTypeEnum;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.util.DigestUtils;
 import org.springframework.util.StringUtils;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Component
 public class GitDiffClient {
 
     private static final Duration COMMAND_TIMEOUT = Duration.ofSeconds(60);
+    private static final Duration OUTPUT_DRAIN_TIMEOUT = Duration.ofSeconds(5);
     private static final int MAX_PATCH_LENGTH = 30_000;
+
+    @Value("${ai-testops.diff.git.allow-local-repository:false}")
+    private boolean allowLocalRepository = false;
+
+    @Value("${ai-testops.diff.git.allowed-hosts:github.com}")
+    private String allowedHosts = "github.com";
 
     public GitDiffResult diff(String repoUrl, String sourceBranch, String targetBranch) {
         validateGitInput(repoUrl, sourceBranch, targetBranch);
@@ -51,12 +68,10 @@ public class GitDiffClient {
         } catch (BusinessException ex) {
             throw ex;
         } catch (Exception ex) {
-            log.warn("Git Diff 获取失败: repoUrl={}, sourceBranch={}, targetBranch={}", repoUrl, sourceBranch, targetBranch, ex);
+            log.warn("Git Diff failed: repoUrl={}, sourceBranch={}, targetBranch={}", repoUrl, sourceBranch, targetBranch, ex);
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Git Diff 获取失败: " + ex.getMessage(), ex);
         }
     }
-
-    private static final List<String> ALLOWED_PROTOCOLS = List.of("https://", "http://", "git@", "ssh://", "git://");
 
     private void validateGitInput(String repoUrl, String sourceBranch, String targetBranch) {
         if (!StringUtils.hasText(repoUrl)) {
@@ -66,9 +81,12 @@ public class GitDiffClient {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "仓库地址格式不合法");
         }
         boolean isLocalPath = repoUrl.startsWith("/") || repoUrl.matches("[A-Za-z]:\\\\.*") || repoUrl.matches("[A-Za-z]:/.*");
-        boolean isAllowedProtocol = ALLOWED_PROTOCOLS.stream().anyMatch(repoUrl::startsWith);
-        if (!isLocalPath && !isAllowedProtocol) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "仓库地址仅支持 https、http、git@、ssh、git 协议或本地绝对路径");
+        if (isLocalPath) {
+            if (!allowLocalRepository) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST, "本地仓库路径未启用");
+            }
+        } else {
+            validateRemoteRepositoryUrl(repoUrl);
         }
         if (!StringUtils.hasText(sourceBranch)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "源分支不能为空");
@@ -81,6 +99,27 @@ public class GitDiffClient {
         }
         if (repoUrl.length() > 500 || sourceBranch.length() > 255 || targetBranch.length() > 255) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "仓库地址或分支名称过长");
+        }
+    }
+
+    private void validateRemoteRepositoryUrl(String repoUrl) {
+        URI uri;
+        try {
+            uri = URI.create(repoUrl);
+        } catch (IllegalArgumentException ex) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "仓库地址格式不合法", ex);
+        }
+        if (!"https".equalsIgnoreCase(uri.getScheme()) || !StringUtils.hasText(uri.getHost())) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "仓库地址仅支持 HTTPS 远程仓库");
+        }
+        String host = uri.getHost().toLowerCase(Locale.ROOT);
+        Set<String> allowList = Arrays.stream(allowedHosts.split(","))
+                .map(String::trim)
+                .filter(StringUtils::hasText)
+                .map(item -> item.toLowerCase(Locale.ROOT))
+                .collect(Collectors.toSet());
+        if (allowList.isEmpty() || !allowList.contains(host)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "仓库地址不在允许的 Git 主机白名单内: " + host);
         }
     }
 
@@ -126,16 +165,38 @@ public class GitDiffClient {
         builder.directory(workingDir.toFile());
         builder.redirectErrorStream(true);
         Process process = builder.start();
+        CompletableFuture<String> outputFuture = CompletableFuture.supplyAsync(() -> readOutput(process.getInputStream()));
         boolean finished = process.waitFor(COMMAND_TIMEOUT.toSeconds(), TimeUnit.SECONDS);
-        String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         if (!finished) {
             process.destroyForcibly();
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Git 命令执行超时");
         }
+        String output = awaitOutput(outputFuture);
         if (process.exitValue() != 0) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, output.isBlank() ? "Git 命令执行失败" : output.trim());
         }
         return output;
+    }
+
+    private String readOutput(InputStream inputStream) {
+        try (InputStream in = inputStream) {
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException ex) {
+            throw new CompletionException(ex);
+        }
+    }
+
+    private String awaitOutput(CompletableFuture<String> outputFuture) {
+        try {
+            return outputFuture.get(OUTPUT_DRAIN_TIMEOUT.toSeconds(), TimeUnit.SECONDS);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "读取 Git 命令输出被中断", ex);
+        } catch (ExecutionException ex) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "读取 Git 命令输出失败", ex);
+        } catch (TimeoutException ex) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "读取 Git 命令输出超时", ex);
+        }
     }
 
     private List<NameStatus> parseNameStatus(String output) {
@@ -198,7 +259,7 @@ public class GitDiffClient {
         try {
             return runGit(repoDir, "diff", "--find-renames", range, "--", path);
         } catch (Exception ex) {
-            log.debug("文件 Patch 获取失败: path={}", path, ex);
+            log.debug("File patch read failed: path={}", path, ex);
             return "";
         }
     }

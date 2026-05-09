@@ -3,6 +3,14 @@ package com.example.aitestops.diff.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.example.aitestops.ai.client.AiClient;
+import com.example.aitestops.ai.dto.AiChatRequest;
+import com.example.aitestops.ai.dto.AiChatResponse;
+import com.example.aitestops.ai.entity.AiTestopsGenerationRecord;
+import com.example.aitestops.ai.service.AiTestopsGenerationRecordService;
+import com.example.aitestops.common.config.AiModelProperties;
+import com.example.aitestops.common.enums.GenerationStatusEnum;
+import com.example.aitestops.common.enums.GenerationTypeEnum;
 import com.example.aitestops.common.exception.BusinessException;
 import com.example.aitestops.common.exception.ErrorCode;
 import com.example.aitestops.common.util.IdGenerator;
@@ -55,8 +63,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -82,6 +92,9 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
     private final AiTestopsDiffMergeGateReportService reportService;
     private final AiTestopsTestCaseService testCaseService;
     private final AiTestopsTestCaseDraftService draftService;
+    private final AiTestopsGenerationRecordService generationRecordService;
+    private final AiClient aiClient;
+    private final AiModelProperties aiModelProperties;
     private final ObjectMapper objectMapper;
 
     @Override
@@ -167,7 +180,13 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
                 risk.setIgnoreReason(StringUtils.hasText(request.getIgnoreReason()) ? request.getIgnoreReason() : request.getActionDesc());
                 yield DiffRiskProcessStatusEnum.IGNORED.name();
             }
-            case "LINK_CASE" -> DiffRiskProcessStatusEnum.WAIT_TEST.name();
+            case "LINK_CASE" -> {
+                linkCasesToRisk(risk, request);
+                risk.setCoverageStatus(DiffCoverageStatusEnum.COVERED.name());
+                risk.setCoverageReason("人工关联已有正式用例");
+                risk.setMergeGateImpact(resolveRiskGateImpact(risk));
+                yield DiffRiskProcessStatusEnum.WAIT_TEST.name();
+            }
             case "MARK_PASS" -> DiffRiskProcessStatusEnum.PASSED.name();
             case "MARK_FAIL" -> DiffRiskProcessStatusEnum.FAILED.name();
             case "MARK_BLOCKED" -> DiffRiskProcessStatusEnum.BLOCKED.name();
@@ -177,7 +196,10 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
         risk.setProcessStatus(after);
         risk.setUpdatedAt(LocalDateTime.now());
         riskItemService.updateById(risk);
-        saveAction(risk, actionType, before, after, request == null ? null : request.getActionDesc(), request == null ? null : request.getOperator(), null);
+        String payload = "LINK_CASE".equals(actionType) && request != null
+                ? JsonUtil.toJson(objectMapper, Map.of("relatedCaseIds", request.getRelatedCaseIds()))
+                : null;
+        saveAction(risk, actionType, before, after, request == null ? null : request.getActionDesc(), request == null ? null : request.getOperator(), payload);
         refreshReport(risk.getTaskId());
     }
 
@@ -213,37 +235,11 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
                 && !DiffCoverageStatusEnum.PARTIAL_COVERED.name().equals(risk.getCoverageStatus())) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "只有未覆盖或部分覆盖风险允许生成补充用例");
         }
-        LocalDateTime now = LocalDateTime.now();
         AiTestopsDiffAnalysisTask task = requireTask(risk.getTaskId());
-        AiTestopsTestCaseDraft draft = new AiTestopsTestCaseDraft();
-        draft.setDraftCaseId(IdGenerator.draftCaseId());
-        draft.setCaseId("DIFF_" + risk.getRiskCode());
-        draft.setGenerationId("DIFF_SUPPLEMENT_" + risk.getId());
-        draft.setDocumentId(task.getDocumentId());
-        draft.setRequirementExtractId(task.getRequirementExtractId());
-        draft.setTitle("补充验证: " + risk.getRiskTitle());
-        draft.setPreconditionsJson(JsonUtil.toJson(objectMapper, List.of("已完成代码 Diff 分析任务 " + task.getTaskCode())));
-        draft.setStepsJson(JsonUtil.toJson(objectMapper, List.of(
-                Map.of("step_no", 1, "action", "根据风险说明准备测试数据: " + nullToEmpty(risk.getRiskReason())),
-                Map.of("step_no", 2, "action", "执行受影响模块验证: " + nullToEmpty(risk.getAffectedModule()))
-        )));
-        draft.setExpectedResultsJson(JsonUtil.toJson(objectMapper, List.of("风险场景被明确验证，未出现回归问题")));
-        draft.setPriority(DiffRiskLevelEnum.HIGH.name().equals(risk.getRiskLevel()) ? "P0" : "P1");
-        draft.setCaseType("DIFF_SUPPLEMENT");
-        draft.setRiskLevel(draft.getPriority());
-        draft.setRequirementRefsJson("[]");
-        draft.setRiskTagsJson(JsonUtil.toJson(objectMapper, List.of(risk.getRiskCategory(), "DIFF_SUPPLEMENT")));
-        draft.setReviewStatus("PENDING");
-        draft.setRawCaseJson(JsonUtil.toJson(objectMapper, Map.of(
-                "source_type", "DIFF_SUPPLEMENT",
-                "source_id", risk.getId(),
-                "risk_code", risk.getRiskCode()
-        )));
-        draft.setCreatedAt(now);
-        draft.setUpdatedAt(now);
-        draftService.save(draft);
+        AiTestopsTestCaseDraft draft = createSupplementDraft(task, risk);
 
         String before = risk.getProcessStatus();
+        LocalDateTime now = LocalDateTime.now();
         risk.setProcessStatus(DiffRiskProcessStatusEnum.WAIT_TEST.name());
         risk.setUpdatedAt(now);
         riskItemService.updateById(risk);
@@ -278,6 +274,9 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
     public void persistAnalysisResults(AiTestopsDiffAnalysisTask task, GitDiffResult diff, DiffAnalysisOptions options) {
         List<AiTestopsDiffChangedFile> files = saveChangedFiles(task, diff, options);
         List<AiTestopsDiffRiskItem> risks = ruleRiskService.buildRuleRisks(task, files);
+        if (Boolean.TRUE.equals(options.getEnableAiAnalysis())) {
+            recordAiRiskAnalysis(task, files, risks);
+        }
         if (!risks.isEmpty()) {
             riskItemService.saveBatch(risks);
             for (AiTestopsDiffRiskItem risk : risks) {
@@ -292,6 +291,7 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
                 if (!match.relations().isEmpty()) {
                     riskCaseRelService.saveBatch(match.relations());
                 }
+                autoGenerateSupplementCaseIfNeeded(task, risk, options);
             }
         }
         refreshReport(task.getId());
@@ -330,6 +330,176 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
             changedFileService.saveBatch(files);
         }
         return files;
+    }
+
+    private void linkCasesToRisk(AiTestopsDiffRiskItem risk, DiffRiskActionRequest request) {
+        Set<Long> requestedCaseIds = request == null || request.getRelatedCaseIds() == null
+                ? Set.of()
+                : request.getRelatedCaseIds().stream().filter(Objects::nonNull).collect(Collectors.toSet());
+        if (requestedCaseIds.isEmpty()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "LINK_CASE 必须提供 relatedCaseIds");
+        }
+        List<AiTestopsTestCase> cases = testCaseService.listByIds(requestedCaseIds);
+        if (cases.size() != requestedCaseIds.size()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "存在无效的正式用例 ID");
+        }
+        List<String> inactiveCaseIds = cases.stream()
+                .filter(testCase -> !"ACTIVE".equals(testCase.getStatus()))
+                .map(AiTestopsTestCase::getTestCaseId)
+                .toList();
+        if (!inactiveCaseIds.isEmpty()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "只能关联 ACTIVE 状态的正式用例: " + String.join(",", inactiveCaseIds));
+        }
+        Set<Long> existingCaseIds = riskCaseRelService.list(new LambdaQueryWrapper<AiTestopsDiffRiskCaseRel>()
+                        .eq(AiTestopsDiffRiskCaseRel::getRiskId, risk.getId())
+                        .in(AiTestopsDiffRiskCaseRel::getCaseId, requestedCaseIds))
+                .stream()
+                .map(AiTestopsDiffRiskCaseRel::getCaseId)
+                .collect(Collectors.toSet());
+        LocalDateTime now = LocalDateTime.now();
+        List<AiTestopsDiffRiskCaseRel> relations = cases.stream()
+                .filter(testCase -> !existingCaseIds.contains(testCase.getId()))
+                .map(testCase -> {
+                    AiTestopsDiffRiskCaseRel rel = new AiTestopsDiffRiskCaseRel();
+                    rel.setRiskId(risk.getId());
+                    rel.setCaseId(testCase.getId());
+                    rel.setDocumentId(testCase.getDocumentId());
+                    rel.setRequirementExtractId(testCase.getRequirementExtractId());
+                    rel.setCaseSourceType("FORMAL");
+                    rel.setRelationType("MANUAL_LINKED_CASE");
+                    rel.setCoverageJudgement(DiffCoverageStatusEnum.COVERED.name());
+                    rel.setJudgementReason("人工关联已有正式用例");
+                    rel.setSimilarityScore(BigDecimal.ONE);
+                    rel.setGeneratedFromAi(0);
+                    rel.setCreatedBy(request == null ? null : request.getOperator());
+                    rel.setCreatedAt(now);
+                    return rel;
+                })
+                .toList();
+        if (!relations.isEmpty()) {
+            riskCaseRelService.saveBatch(relations);
+        }
+    }
+
+    private void autoGenerateSupplementCaseIfNeeded(AiTestopsDiffAnalysisTask task, AiTestopsDiffRiskItem risk, DiffAnalysisOptions options) {
+        if (!Boolean.TRUE.equals(options.getAutoGenerateSupplementCases())) {
+            return;
+        }
+        if (!DiffCoverageStatusEnum.NOT_COVERED.name().equals(risk.getCoverageStatus())
+                && !DiffCoverageStatusEnum.PARTIAL_COVERED.name().equals(risk.getCoverageStatus())) {
+            return;
+        }
+        AiTestopsTestCaseDraft draft = createSupplementDraft(task, risk);
+        String before = risk.getProcessStatus();
+        risk.setProcessStatus(DiffRiskProcessStatusEnum.WAIT_TEST.name());
+        risk.setUpdatedAt(LocalDateTime.now());
+        riskItemService.updateById(risk);
+        saveAction(risk, "AUTO_GENERATE_CASE", before, risk.getProcessStatus(), "自动生成 Diff 补充用例草稿", "system",
+                JsonUtil.toJson(objectMapper, Map.of("draftCaseId", draft.getDraftCaseId())));
+    }
+
+    private AiTestopsTestCaseDraft createSupplementDraft(AiTestopsDiffAnalysisTask task, AiTestopsDiffRiskItem risk) {
+        LocalDateTime now = LocalDateTime.now();
+        AiTestopsTestCaseDraft draft = new AiTestopsTestCaseDraft();
+        draft.setDraftCaseId(IdGenerator.draftCaseId());
+        draft.setCaseId("DIFF_" + risk.getRiskCode());
+        draft.setGenerationId("DIFF_SUPPLEMENT_" + risk.getId() + "_" + now.toString().replace(":", "").replace("-", ""));
+        draft.setDocumentId(task.getDocumentId());
+        draft.setRequirementExtractId(task.getRequirementExtractId());
+        draft.setTitle("补充验证: " + risk.getRiskTitle());
+        draft.setPreconditionsJson(JsonUtil.toJson(objectMapper, List.of("已完成代码 Diff 分析任务 " + task.getTaskCode())));
+        draft.setStepsJson(JsonUtil.toJson(objectMapper, List.of(
+                Map.of("step_no", 1, "action", "根据风险说明准备测试数据: " + nullToEmpty(risk.getRiskReason())),
+                Map.of("step_no", 2, "action", "执行受影响模块验证: " + nullToEmpty(risk.getAffectedModule()))
+        )));
+        draft.setExpectedResultsJson(JsonUtil.toJson(objectMapper, List.of("风险场景被明确验证，未出现回归问题")));
+        draft.setPriority(DiffRiskLevelEnum.HIGH.name().equals(risk.getRiskLevel()) ? "P0" : "P1");
+        draft.setCaseType("DIFF_SUPPLEMENT");
+        draft.setRiskLevel(draft.getPriority());
+        draft.setRequirementRefsJson("[]");
+        draft.setRiskTagsJson(JsonUtil.toJson(objectMapper, List.of(risk.getRiskCategory(), "DIFF_SUPPLEMENT")));
+        draft.setReviewStatus("PENDING");
+        draft.setRawCaseJson(JsonUtil.toJson(objectMapper, Map.of(
+                "source_type", "DIFF_SUPPLEMENT",
+                "source_id", risk.getId(),
+                "risk_code", risk.getRiskCode()
+        )));
+        draft.setCreatedAt(now);
+        draft.setUpdatedAt(now);
+        draftService.save(draft);
+        return draft;
+    }
+
+    private void recordAiRiskAnalysis(AiTestopsDiffAnalysisTask task, List<AiTestopsDiffChangedFile> files,
+                                      List<AiTestopsDiffRiskItem> ruleRisks) {
+        String generationId = IdGenerator.generationId();
+        Map<String, Object> inputSnapshot = new LinkedHashMap<>();
+        inputSnapshot.put("taskCode", task.getTaskCode());
+        inputSnapshot.put("documentId", task.getDocumentId());
+        inputSnapshot.put("requirementExtractId", task.getRequirementExtractId());
+        inputSnapshot.put("repoName", task.getRepoName());
+        inputSnapshot.put("sourceBranch", task.getSourceBranch());
+        inputSnapshot.put("targetBranch", task.getTargetBranch());
+        inputSnapshot.put("changedFiles", files.stream().map(file -> Map.of(
+                "path", file.getNewFilePath(),
+                "changeType", file.getChangeType(),
+                "fileRole", file.getFileRole(),
+                "additions", n(file.getAdditions()),
+                "deletions", n(file.getDeletions()),
+                "patchSummary", nullToEmpty(file.getPatchSummary())
+        )).toList());
+        inputSnapshot.put("ruleRisks", ruleRisks.stream().map(risk -> Map.of(
+                "riskCode", risk.getRiskCode(),
+                "riskTitle", risk.getRiskTitle(),
+                "riskLevel", risk.getRiskLevel(),
+                "affectedModule", nullToEmpty(risk.getAffectedModule()),
+                "riskReason", nullToEmpty(risk.getRiskReason())
+        )).toList());
+
+        LocalDateTime now = LocalDateTime.now();
+        AiTestopsGenerationRecord record = new AiTestopsGenerationRecord();
+        record.setGenerationId(generationId);
+        record.setDocumentId(task.getDocumentId());
+        record.setRequirementExtractId(task.getRequirementExtractId());
+        record.setPromptTemplateCode("DIFF_RISK_ANALYSIS_BUILTIN");
+        record.setPromptTemplateVersion("v1");
+        record.setModelCode(aiModelProperties.getModelCode());
+        record.setModelName(aiModelProperties.getModelName());
+        record.setGenerationType(GenerationTypeEnum.DIFF_RISK_ANALYSIS.name());
+        record.setInputSnapshotJson(JsonUtil.toJson(objectMapper, inputSnapshot));
+        record.setStatus(GenerationStatusEnum.PROCESSING.name());
+        record.setStartedAt(now);
+        record.setCreatedAt(now);
+        record.setUpdatedAt(now);
+        generationRecordService.save(record);
+
+        try {
+            AiChatResponse response = aiClient.chat(AiChatRequest.builder()
+                    .modelCode(aiModelProperties.getModelCode())
+                    .modelName(aiModelProperties.getModelName())
+                    .systemPrompt("你是代码 Diff 测试覆盖风险分析助手。请基于变更文件和规则风险输出风险补充建议 JSON。")
+                    .userPrompt(JsonUtil.toJson(objectMapper, inputSnapshot))
+                    .generationType(GenerationTypeEnum.DIFF_RISK_ANALYSIS.name())
+                    .build());
+            generationRecordService.update(new LambdaUpdateWrapper<AiTestopsGenerationRecord>()
+                    .eq(AiTestopsGenerationRecord::getGenerationId, generationId)
+                    .set(AiTestopsGenerationRecord::getOutputJson, response.getRawResponseJson())
+                    .set(AiTestopsGenerationRecord::getStatus, GenerationStatusEnum.SUCCESS.name())
+                    .set(AiTestopsGenerationRecord::getErrorMessage, null)
+                    .set(AiTestopsGenerationRecord::getTokenInput, response.getPromptTokens())
+                    .set(AiTestopsGenerationRecord::getTokenOutput, response.getCompletionTokens())
+                    .set(AiTestopsGenerationRecord::getModelName, response.getModelName())
+                    .set(AiTestopsGenerationRecord::getFinishedAt, LocalDateTime.now())
+                    .set(AiTestopsGenerationRecord::getUpdatedAt, LocalDateTime.now()));
+        } catch (Exception ex) {
+            log.warn("Diff AI 风险分析失败，保留规则风险: taskId={}, generationId={}", task.getId(), generationId, ex);
+            generationRecordService.update(new LambdaUpdateWrapper<AiTestopsGenerationRecord>()
+                    .eq(AiTestopsGenerationRecord::getGenerationId, generationId)
+                    .set(AiTestopsGenerationRecord::getStatus, GenerationStatusEnum.FAILED.name())
+                    .set(AiTestopsGenerationRecord::getErrorMessage, truncate(ex.getMessage(), 1000))
+                    .set(AiTestopsGenerationRecord::getFinishedAt, LocalDateTime.now())
+                    .set(AiTestopsGenerationRecord::getUpdatedAt, LocalDateTime.now()));
+        }
     }
 
     private void refreshReport(Long taskId) {

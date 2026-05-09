@@ -1,5 +1,6 @@
 package com.example.aitestops.diff;
 
+import com.example.aitestops.common.exception.BusinessException;
 import com.example.aitestops.diff.entity.AiTestopsDiffChangedFile;
 import com.example.aitestops.diff.entity.AiTestopsDiffRiskItem;
 import com.example.aitestops.diff.enums.DiffCoverageStatusEnum;
@@ -8,6 +9,7 @@ import com.example.aitestops.diff.enums.DiffMergeGateStatusEnum;
 import com.example.aitestops.diff.enums.DiffRiskLevelEnum;
 import com.example.aitestops.diff.enums.DiffRiskProcessStatusEnum;
 import com.example.aitestops.diff.gate.DiffMergeGateCalculator;
+import com.example.aitestops.diff.git.GitDiffClient;
 import com.example.aitestops.diff.risk.DiffFileClassifier;
 import com.example.aitestops.diff.risk.DiffRuleRiskService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -16,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class DiffRuleAndGateTest {
 
@@ -62,6 +65,21 @@ class DiffRuleAndGateTest {
         assertThat(gateCalculator.calculate(List.of(highNotCovered))).isEqualTo(DiffMergeGateStatusEnum.BLOCK);
         assertThat(gateCalculator.calculate(List.of(mediumNotCovered))).isEqualTo(DiffMergeGateStatusEnum.WARNING);
         assertThat(gateCalculator.calculate(List.of(covered))).isEqualTo(DiffMergeGateStatusEnum.PASS);
+    }
+
+    @Test
+    void gitClientShouldRejectUnsafeRepositoryUrlsByDefault() {
+        GitDiffClient client = new GitDiffClient();
+
+        assertThatThrownBy(() -> client.diff("http://github.com/acai1998/AI-TestOps.git", "feature", "master"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("HTTPS");
+        assertThatThrownBy(() -> client.diff("https://example.com/repo.git", "feature", "master"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("白名单");
+        assertThatThrownBy(() -> client.diff("C:/repo", "feature", "master"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("本地仓库路径未启用");
     }
 
     private AiTestopsDiffRiskItem risk(String level, String coverage, String processStatus) {
