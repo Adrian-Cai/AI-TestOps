@@ -62,10 +62,6 @@ ai-testops:
   parser:
     chunk-target-size: ${AI_TESTOPS_CHUNK_TARGET_SIZE:2000}
     chunk-max-size: ${AI_TESTOPS_CHUNK_MAX_SIZE:3000}
-  diff:
-    git:
-      allow-local-repository: ${AI_TESTOPS_DIFF_GIT_ALLOW_LOCAL_REPOSITORY:false}
-      allowed-hosts: ${AI_TESTOPS_DIFF_GIT_ALLOWED_HOSTS:github.com}
   ai:
     provider: ${AI_PROVIDER:MOCK}
     model-code: ${AI_MODEL_CODE:default}

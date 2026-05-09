@@ -28,7 +28,6 @@ public final class RemoteMariaDbSchemaMigrator {
     private static final Path DDL_PATH = Path.of("docs/sql/ai_testops_mariadb_schema.sql");
     private static final String TABLE_PREFIX = "ai_testops_%";
     private static final Map<String, Map<String, String>> LEGACY_NULLABLE_COLUMNS = legacyNullableColumns();
-    private static final Map<String, Map<String, String>> LEGACY_COLUMN_TYPES = legacyColumnTypes();
 
     private RemoteMariaDbSchemaMigrator() {
     }
@@ -49,9 +48,7 @@ public final class RemoteMariaDbSchemaMigrator {
             printSchemaSummary(connection, "before");
             int executed = executeDdl(connection);
             int compatibilityExecuted = executeLegacyCompatibilityDdl(connection);
-            int typeFixExecuted = executeLegacyTypeDdl(connection);
-            System.out.println("DDL executed count=" + executed + ", compatibility count=" + compatibilityExecuted
-                    + ", type fix count=" + typeFixExecuted);
+            System.out.println("DDL executed count=" + executed + ", compatibility count=" + compatibilityExecuted);
             printSchemaSummary(connection, "after");
         }
     }
@@ -136,27 +133,6 @@ public final class RemoteMariaDbSchemaMigrator {
                     }
                     statement.execute("ALTER TABLE " + tableName + " MODIFY COLUMN "
                             + columnEntry.getKey() + " " + columnEntry.getValue() + " NULL");
-                    executed++;
-                }
-            }
-        }
-        return executed;
-    }
-
-    private static int executeLegacyTypeDdl(Connection connection) throws SQLException {
-        int executed = 0;
-        try (Statement statement = connection.createStatement()) {
-            for (Map.Entry<String, Map<String, String>> tableEntry : LEGACY_COLUMN_TYPES.entrySet()) {
-                String tableName = tableEntry.getKey();
-                if (!tableExists(connection, tableName)) {
-                    continue;
-                }
-                for (Map.Entry<String, String> columnEntry : tableEntry.getValue().entrySet()) {
-                    if (!columnExists(connection, tableName, columnEntry.getKey())) {
-                        continue;
-                    }
-                    statement.execute("ALTER TABLE " + tableName + " MODIFY COLUMN "
-                            + columnEntry.getKey() + " " + columnEntry.getValue());
                     executed++;
                 }
             }
@@ -344,28 +320,6 @@ public final class RemoteMariaDbSchemaMigrator {
                 "change_summary", "LONGTEXT",
                 "review_comment", "VARCHAR(1000)",
                 "reviewed_at", "DATETIME"
-        ));
-        return tables;
-    }
-
-    private static Map<String, Map<String, String>> legacyColumnTypes() {
-        Map<String, Map<String, String>> tables = new LinkedHashMap<>();
-        tables.put("ai_testops_diff_analysis_task", orderedMap(
-                "document_id", "VARCHAR(64) NULL",
-                "requirement_extract_id", "VARCHAR(64) NULL",
-                "changed_method_count", "INT NOT NULL DEFAULT 0"
-        ));
-        tables.put("ai_testops_diff_risk_item", orderedMap(
-                "document_id", "VARCHAR(64) NULL",
-                "requirement_extract_id", "VARCHAR(64) NULL",
-                "affected_module", "VARCHAR(1000) NULL"
-        ));
-        tables.put("ai_testops_diff_risk_case_rel", orderedMap(
-                "document_id", "VARCHAR(64) NULL",
-                "requirement_extract_id", "VARCHAR(64) NULL"
-        ));
-        tables.put("ai_testops_diff_merge_gate_report", orderedMap(
-                "changed_method_count", "INT NOT NULL DEFAULT 0"
         ));
         return tables;
     }

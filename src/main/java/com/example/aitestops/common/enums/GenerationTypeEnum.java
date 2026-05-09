@@ -6,8 +6,5 @@ package com.example.aitestops.common.enums;
 public enum GenerationTypeEnum {
     REQUIREMENT_EXTRACT,
     TEST_CASE_GENERATE,
-    DIFF_RISK_ANALYSIS,
-    DIFF_COVERAGE_JUDGEMENT,
-    DIFF_SUPPLEMENT_CASE_GENERATION,
     VALIDATION
 }
