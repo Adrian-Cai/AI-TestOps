@@ -1,6 +1,7 @@
 package com.example.aitestops.diff;
 
 import com.example.aitestops.common.exception.BusinessException;
+import com.example.aitestops.diff.entity.AiTestopsDiffAnalysisTask;
 import com.example.aitestops.diff.entity.AiTestopsDiffChangedFile;
 import com.example.aitestops.diff.entity.AiTestopsDiffRiskItem;
 import com.example.aitestops.diff.enums.DiffCoverageStatusEnum;
@@ -14,8 +15,10 @@ import com.example.aitestops.diff.risk.DiffFileClassifier;
 import com.example.aitestops.diff.risk.DiffRuleRiskService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -57,6 +60,20 @@ class DiffRuleAndGateTest {
     }
 
     @Test
+    void buildRuleRisksShouldFitRiskTitleDatabaseLimitForLongPaths() {
+        String longPath = "src/main/java/demo/" + "VeryLongPackageName".repeat(20) + "/OrderService.java";
+        AiTestopsDiffAnalysisTask task = new AiTestopsDiffAnalysisTask();
+        task.setId(1L);
+        AiTestopsDiffChangedFile file = file(longPath, DiffFileRoleEnum.SERVICE.name(), "JAVA");
+
+        List<AiTestopsDiffRiskItem> risks = riskService.buildRuleRisks(task, List.of(file));
+
+        assertThat(risks).hasSize(1);
+        assertThat(risks.get(0).getRiskTitle()).hasSizeLessThanOrEqualTo(255);
+        assertThat(risks.get(0).getAffectedScenarios()).contains(longPath);
+    }
+
+    @Test
     void gateShouldBlockHighRiskNotCoveredAndPassCoveredRisks() {
         AiTestopsDiffRiskItem highNotCovered = risk(DiffRiskLevelEnum.HIGH.name(), DiffCoverageStatusEnum.NOT_COVERED.name(), DiffRiskProcessStatusEnum.PENDING.name());
         AiTestopsDiffRiskItem mediumNotCovered = risk(DiffRiskLevelEnum.MEDIUM.name(), DiffCoverageStatusEnum.NOT_COVERED.name(), DiffRiskProcessStatusEnum.PENDING.name());
@@ -80,6 +97,30 @@ class DiffRuleAndGateTest {
         assertThatThrownBy(() -> client.diff("C:/repo", "feature", "master"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("本地仓库路径未启用");
+    }
+
+    @Test
+    void gitClientShouldUseCachedBranchesWhenRemoteLookupFails() {
+        GitDiffClient client = new GitDiffClient();
+        ReflectionTestUtils.setField(client, "allowedHosts", "localhost");
+        String repoUrl = "https://localhost/acai1998/AI-TestOps.git";
+        @SuppressWarnings("unchecked")
+        Map<String, List<String>> branchCache = (Map<String, List<String>>) ReflectionTestUtils.getField(client, "branchCache");
+        branchCache.put(repoUrl, List.of("master", "feature/diff-analysis-task"));
+
+        List<String> branches = client.listBranches(repoUrl);
+
+        assertThat(branches).containsExactly("master", "feature/diff-analysis-task");
+    }
+
+    @Test
+    void gitClientShouldReturnFriendlyMessageWhenRemoteLookupFailsWithoutCache() {
+        GitDiffClient client = new GitDiffClient();
+        ReflectionTestUtils.setField(client, "allowedHosts", "localhost");
+
+        assertThatThrownBy(() -> client.listBranches("https://localhost/acai1998/AI-TestOps.git"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("无法连接 Git 远程仓库");
     }
 
     private AiTestopsDiffRiskItem risk(String level, String coverage, String processStatus) {

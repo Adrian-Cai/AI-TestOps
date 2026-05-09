@@ -25,6 +25,8 @@ import java.util.Locale;
 @RequiredArgsConstructor
 public class DiffRuleRiskService {
 
+    private static final int RISK_TITLE_MAX_LENGTH = 255;
+
     private final ObjectMapper objectMapper;
 
     public RuleRiskDecision decide(AiTestopsDiffChangedFile file) {
@@ -67,7 +69,7 @@ public class DiffRuleRiskService {
             risk.setDocumentId(task.getDocumentId());
             risk.setRequirementExtractId(task.getRequirementExtractId());
             risk.setRiskCode(IdGenerator.diffRiskCode() + "_" + index++);
-            risk.setRiskTitle(file.getFileRole() + " 文件变更风险: " + file.getNewFilePath());
+            risk.setRiskTitle(truncate(file.getFileRole() + " 文件变更风险: " + file.getNewFilePath(), RISK_TITLE_MAX_LENGTH));
             risk.setRiskLevel(decision.riskLevel());
             risk.setRiskCategory(decision.riskCategory());
             risk.setSourceType(DiffRiskSourceTypeEnum.RULE.name());
@@ -113,5 +115,12 @@ public class DiffRuleRiskService {
             return true;
         }
         return "git".equals(fileName);
+    }
+
+    private String truncate(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, maxLength);
     }
 }

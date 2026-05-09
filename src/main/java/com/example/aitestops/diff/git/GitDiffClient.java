@@ -25,6 +25,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -43,6 +44,8 @@ public class GitDiffClient {
 
     @Value("${ai-testops.diff.git.allowed-hosts:github.com}")
     private String allowedHosts = "github.com";
+
+    private final Map<String, List<String>> branchCache = new ConcurrentHashMap<>();
 
     public GitDiffResult diff(String repoUrl, String sourceBranch, String targetBranch) {
         validateGitInput(repoUrl, sourceBranch, targetBranch);
@@ -75,21 +78,33 @@ public class GitDiffClient {
 
     public List<String> listBranches(String repoUrl) {
         validateRepositoryUrl(repoUrl);
-        try {
-            if (isLocalPath(repoUrl)) {
+        if (isLocalPath(repoUrl)) {
+            try {
                 Path repoDir = Path.of(repoUrl).toAbsolutePath().normalize();
                 if (!Files.exists(repoDir.resolve(".git"))) {
                     throw new BusinessException(ErrorCode.BAD_REQUEST, "本地仓库路径不是有效 Git 仓库");
                 }
-                return parseLocalBranches(runGit(repoDir, "branch", "--format=%(refname:short)"));
+                return cacheBranches(repoUrl, parseLocalBranches(runGit(repoDir, "branch", "--format=%(refname:short)")));
+            } catch (BusinessException ex) {
+                throw ex;
+            } catch (Exception ex) {
+                log.warn("Git local branch list failed: repoUrl={}", repoUrl, ex);
+                throw new BusinessException(ErrorCode.BAD_REQUEST, "Git 本地分支列表获取失败: " + ex.getMessage(), ex);
             }
-            return parseRemoteBranches(runCommand(Path.of(".").toAbsolutePath().normalize(),
+        }
+
+        try {
+            List<String> branches = parseRemoteBranches(runCommand(Path.of(".").toAbsolutePath().normalize(),
                     List.of("git", "ls-remote", "--heads", repoUrl)));
-        } catch (BusinessException ex) {
-            throw ex;
+            return cacheBranches(repoUrl, branches);
         } catch (Exception ex) {
-            log.warn("Git branch list failed: repoUrl={}", repoUrl, ex);
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "Git 分支列表获取失败: " + ex.getMessage(), ex);
+            List<String> fallbackBranches = fallbackRemoteBranches(repoUrl);
+            if (!fallbackBranches.isEmpty()) {
+                log.warn("Git remote branch list failed, using cached branches: repoUrl={}, message={}", repoUrl, ex.getMessage());
+                return fallbackBranches;
+            }
+            log.warn("Git remote branch list failed: repoUrl={}, message={}", repoUrl, ex.getMessage());
+            throw new BusinessException(ErrorCode.BAD_REQUEST, normalizeRemoteGitError(ex.getMessage()), ex);
         }
     }
 
@@ -154,10 +169,9 @@ public class GitDiffClient {
     }
 
     private Path prepareRepository(String repoUrl) throws IOException, InterruptedException {
-        Path cacheRoot = Path.of("data", "git-cache").toAbsolutePath().normalize();
+        Path cacheRoot = gitCacheRoot();
         Files.createDirectories(cacheRoot);
-        String hash = DigestUtils.md5DigestAsHex(repoUrl.getBytes(StandardCharsets.UTF_8));
-        Path repoDir = cacheRoot.resolve(hash);
+        Path repoDir = gitCacheDir(repoUrl);
         if (Files.exists(repoDir.resolve(".git"))) {
             return repoDir;
         }
@@ -166,6 +180,15 @@ public class GitDiffClient {
         }
         runCommand(cacheRoot, List.of("git", "clone", "--no-tags", repoUrl, repoDir.toString()));
         return repoDir;
+    }
+
+    private Path gitCacheRoot() {
+        return Path.of("data", "git-cache").toAbsolutePath().normalize();
+    }
+
+    private Path gitCacheDir(String repoUrl) {
+        String hash = DigestUtils.md5DigestAsHex(repoUrl.getBytes(StandardCharsets.UTF_8));
+        return gitCacheRoot().resolve(hash);
     }
 
     private String resolveRef(Path repoDir, String branch) throws IOException, InterruptedException {
@@ -265,6 +288,37 @@ public class GitDiffClient {
                 .toList();
     }
 
+    private List<String> fallbackRemoteBranches(String repoUrl) {
+        List<String> cachedBranches = branchCache.get(repoUrl);
+        if (cachedBranches != null && !cachedBranches.isEmpty()) {
+            return cachedBranches;
+        }
+        Path repoDir = gitCacheDir(repoUrl);
+        if (!Files.exists(repoDir.resolve(".git"))) {
+            return List.of();
+        }
+        try {
+            List<String> branches = parseCachedRemoteBranches(runGit(repoDir,
+                    "for-each-ref", "--format=%(refname:short)", "refs/remotes/origin", "refs/heads"));
+            return cacheBranches(repoUrl, branches);
+        } catch (Exception ex) {
+            log.debug("Git cached branch fallback failed: repoUrl={}", repoUrl, ex);
+            return List.of();
+        }
+    }
+
+    private List<String> parseCachedRemoteBranches(String output) {
+        return output.lines()
+                .map(String::trim)
+                .filter(StringUtils::hasText)
+                .filter(item -> !"HEAD".equals(item) && !"origin/HEAD".equals(item))
+                .map(item -> item.startsWith("origin/") ? item.substring("origin/".length()) : item)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .sorted()
+                .toList();
+    }
+
     private List<String> parseLocalBranches(String output) {
         return output.lines()
                 .map(String::trim)
@@ -272,6 +326,24 @@ public class GitDiffClient {
                 .distinct()
                 .sorted()
                 .toList();
+    }
+
+    private List<String> cacheBranches(String repoUrl, List<String> branches) {
+        List<String> safeBranches = branches == null ? List.of() : List.copyOf(branches);
+        if (!safeBranches.isEmpty()) {
+            branchCache.put(repoUrl, safeBranches);
+        }
+        return safeBranches;
+    }
+
+    private String normalizeRemoteGitError(String message) {
+        String text = message == null ? "" : message;
+        String lower = text.toLowerCase(Locale.ROOT);
+        if (lower.contains("could not resolve host") || lower.contains("failed to connect")
+                || lower.contains("connection timed out") || lower.contains("network is unreachable")) {
+            return "无法连接 Git 远程仓库，请检查服务器网络、DNS 或代理配置；也可以稍后重试。";
+        }
+        return StringUtils.hasText(text) ? text.trim() : "Git 远程分支列表获取失败";
     }
 
     private Map<String, NumStat> parseNumStat(String output) {

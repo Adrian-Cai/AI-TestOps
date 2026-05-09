@@ -74,6 +74,7 @@ class AiTestopsDiffAnalysisServiceIntegrationTest {
         assertThat(task.getStatus()).isEqualTo("SUCCESS");
         assertThat(report.getChangedFiles()).hasSize(1);
         assertThat(report.getChangedFiles().get(0).getFileRole()).isEqualTo("SERVICE");
+        assertThat(report.getReport().getChangedMethodCount()).isZero();
         assertThat(report.getRiskList()).hasSize(1);
         assertThat(report.getRiskList().get(0).getRiskLevel()).isEqualTo("HIGH");
         assertThat(report.getReport()).isNotNull();

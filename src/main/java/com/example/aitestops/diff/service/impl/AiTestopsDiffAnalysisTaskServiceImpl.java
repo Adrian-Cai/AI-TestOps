@@ -431,7 +431,7 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
         draft.setGenerationId("DIFF_SUPPLEMENT_" + risk.getId() + "_" + now.toString().replace(":", "").replace("-", ""));
         draft.setDocumentId(task.getDocumentId());
         draft.setRequirementExtractId(task.getRequirementExtractId());
-        draft.setTitle("补充验证: " + risk.getRiskTitle());
+        draft.setTitle(truncate("补充验证: " + risk.getRiskTitle(), 255));
         draft.setPreconditionsJson(JsonUtil.toJson(objectMapper, List.of("已完成代码 Diff 分析任务 " + task.getTaskCode())));
         draft.setStepsJson(JsonUtil.toJson(objectMapper, List.of(
                 Map.of("step_no", 1, "action", "根据风险说明准备测试数据: " + nullToEmpty(risk.getRiskReason())),
@@ -544,7 +544,7 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
         report.setGateStatus(gate.name());
         report.setGateReason(buildGateReason(gate, risks));
         report.setChangedFileCount(files.size());
-        report.setChangedMethodCount(null);
+        report.setChangedMethodCount(0);
         report.setHighRiskCount(countRiskLevel(risks, DiffRiskLevelEnum.HIGH.name()));
         report.setMediumRiskCount(countRiskLevel(risks, DiffRiskLevelEnum.MEDIUM.name()));
         report.setLowRiskCount(countRiskLevel(risks, DiffRiskLevelEnum.LOW.name()));
@@ -714,7 +714,7 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
         task.setAnalysisOptions(JsonUtil.toJson(objectMapper, options));
         task.setStatus(DiffAnalysisTaskStatusEnum.PENDING.name());
         task.setChangedFileCount(0);
-        task.setChangedMethodCount(null);
+        task.setChangedMethodCount(0);
         task.setHighRiskCount(0);
         task.setMediumRiskCount(0);
         task.setLowRiskCount(0);
