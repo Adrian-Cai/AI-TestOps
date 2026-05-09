@@ -1,6 +1,5 @@
 import {
   Alert,
-  AutoComplete,
   Badge,
   Button,
   Card,
@@ -64,11 +63,6 @@ import type {
   DocumentChunkVO,
   DocumentParseSummaryVO,
   DocumentVO,
-  DiffAnalysisReportVO,
-  DiffAnalysisSourceVO,
-  DiffAnalysisTaskVO,
-  DiffChangedFileVO,
-  DiffRiskItemVO,
   GenerationRecordVO,
   OperationLog,
   RequirementExtractVO,
@@ -94,7 +88,7 @@ const exampleRequirement = `用户可以提交订单。
 4. 同一订单号不能重复提交。
 5. 订单提交成功后状态变为待支付。`;
 
-type StepKey = "input" | "parse" | "generate" | "review" | "export" | "diff";
+type StepKey = "input" | "parse" | "generate" | "review" | "export";
 type StepStatus = "wait" | "process" | "finish" | "error";
 
 const stepKeys: StepKey[] = ["input", "parse", "generate", "review", "export"];
@@ -104,8 +98,7 @@ const menuItems: MenuProps["items"] = [
   { key: "parse", icon: <FileSearchOutlined />, label: "文档解析" },
   { key: "generate", icon: <RobotOutlined />, label: "AI 生成" },
   { key: "review", icon: <EditOutlined />, label: "人工确认" },
-  { key: "export", icon: <DownloadOutlined />, label: "保存导出" },
-  { key: "diff", icon: <CodeOutlined />, label: "Diff 分析" }
+  { key: "export", icon: <DownloadOutlined />, label: "保存导出" }
 ];
 
 function App() {
@@ -184,12 +177,6 @@ function App() {
   const [logs, setLogs] = useState<OperationLog[]>([]);
   const [caseCount, setCaseCount] = useState(20);
   const [draftForm] = Form.useForm();
-  const [diffForm] = Form.useForm();
-  const [diffTasks, setDiffTasks] = useState<DiffAnalysisTaskVO[]>([]);
-  const [diffSources, setDiffSources] = useState<DiffAnalysisSourceVO[]>([]);
-  const [diffBranches, setDiffBranches] = useState<string[]>([]);
-  const [diffReport, setDiffReport] = useState<DiffAnalysisReportVO | null>(null);
-  const [activeDiffFile, setActiveDiffFile] = useState<DiffChangedFileVO | null>(null);
 
   const documentId = documentInfo?.documentId;
   const generationId = generationResult?.generationId || requirementExtract?.generationId || generationRecord?.generationId;
@@ -369,94 +356,6 @@ function App() {
       api.listCases({ documentId, requirementExtractId: requirementExtract?.requirementExtractId })
     );
     if (data) setCases(data);
-  };
-
-  const createDiffTask = async () => {
-    const values = await diffForm.validateFields();
-    const data = await runAction("diff-create", "创建 Diff 分析任务", () =>
-      api.createDiffTask({
-        documentId: values.documentId || documentId,
-        requirementExtractId: values.requirementExtractId || requirementExtract?.requirementExtractId,
-        repoUrl: values.repoUrl,
-        sourceBranch: values.sourceBranch,
-        targetBranch: values.targetBranch || "master",
-        analysisOptions: {
-          includeTestFiles: Boolean(values.includeTestFiles),
-          enableAiAnalysis: Boolean(values.enableAiAnalysis),
-          enableCoverageCheck: Boolean(values.enableCoverageCheck),
-          autoGenerateSupplementCases: Boolean(values.autoGenerateSupplementCases)
-        }
-      })
-    );
-    if (data) {
-      await refreshDiffTasks();
-      await loadDiffReport(data.taskId);
-    }
-  };
-
-  const refreshDiffTasks = async () => {
-    const selectedDocumentId = diffForm.getFieldValue("documentId") || documentId;
-    const selectedRequirementExtractId = diffForm.getFieldValue("requirementExtractId") || requirementExtract?.requirementExtractId;
-    const data = await runAction("diff-list", "查询 Diff 分析任务", () =>
-      api.listDiffTasks({ documentId: selectedDocumentId, requirementExtractId: selectedRequirementExtractId })
-    );
-    if (data) setDiffTasks(data);
-  };
-
-  const refreshDiffSources = async () => {
-    const data = await runAction("diff-sources", "查询最近需求来源", () => api.listDiffSources(10));
-    if (data) {
-      setDiffSources(data);
-      const currentDocumentId = diffForm.getFieldValue("documentId") || documentId;
-      if (!currentDocumentId && data[0]) {
-        diffForm.setFieldsValue({
-          documentId: data[0].documentId,
-          requirementExtractId: data[0].requirementExtractId
-        });
-      }
-    }
-  };
-
-  const refreshRepositoryBranches = async () => {
-    const repoUrl = diffForm.getFieldValue("repoUrl");
-    if (!repoUrl) {
-      messageApi.warning("请先输入仓库地址");
-      return;
-    }
-    const data = await runAction("diff-branches", "查询仓库分支", () => api.listRepositoryBranches(repoUrl));
-    if (data) {
-      setDiffBranches(data);
-      if (!diffForm.getFieldValue("targetBranch")) {
-        diffForm.setFieldValue("targetBranch", data.includes("master") ? "master" : data.includes("main") ? "main" : data[0]);
-      }
-    }
-  };
-
-  const loadDiffReport = async (taskId: number) => {
-    const data = await runAction("diff-report", "查询 Diff 分析报告", () => api.getDiffReport(taskId));
-    if (data) setDiffReport(data);
-  };
-
-  const applyRiskAction = async (risk: DiffRiskItemVO, actionType: string) => {
-    const data = await runAction("diff-risk-action", "更新风险状态", () =>
-      api.applyDiffRiskAction(risk.riskId, {
-        actionType,
-        actionDesc: actionType === "IGNORE" ? "页面忽略" : "页面操作",
-        ignoreReason: actionType === "IGNORE" ? "人工判断本次无需处理" : undefined,
-        operator: "manual_user"
-      })
-    );
-    if (data !== null && diffReport?.task.taskId) {
-      await loadDiffReport(diffReport.task.taskId);
-    }
-  };
-
-  const generateSupplementCases = async (risk: DiffRiskItemVO) => {
-    const data = await runAction("diff-supplement", "生成补充用例", () => api.generateDiffSupplementCases(risk.riskId));
-    if (data && diffReport?.task.taskId) {
-      await loadDiffReport(diffReport.task.taskId);
-      messageApi.success(`已生成 ${data.generatedCases.length} 条补充用例草稿`);
-    }
   };
 
   const saveDraft = async () => {
@@ -645,19 +544,12 @@ function App() {
           <div className="content-grid">
             <main className="workbench-main">
               <Card className="step-card">
-                {currentStep === "diff" ? (
-                  <Space>
-                    <CodeOutlined />
-                    <Text strong>代码 Diff 分析与测试覆盖风险识别</Text>
-                  </Space>
-                ) : (
-                  <Steps
-                    current={stepKeys.indexOf(currentStep)}
-                    items={steps}
-                    onChange={(index) => setCurrentStep(stepKeys[index])}
-                    responsive
-                  />
-                )}
+                <Steps
+                  current={stepKeys.indexOf(currentStep)}
+                  items={steps}
+                  onChange={(index) => setCurrentStep(stepKeys[index])}
+                  responsive
+                />
               </Card>
               {renderMetricStrip()}
 
@@ -667,7 +559,6 @@ function App() {
                 {currentStep === "generate" && renderGenerateStep()}
                 {currentStep === "review" && renderReviewStep()}
                 {currentStep === "export" && renderExportStep()}
-                {currentStep === "diff" && renderDiffStep()}
               </Spin>
             </main>
 
@@ -756,24 +647,6 @@ function App() {
             </Form.Item>
           </Form>
         )}
-      </Drawer>
-
-      <Drawer
-        title={activeDiffFile?.newFilePath || "Diff Patch"}
-        width={760}
-        open={Boolean(activeDiffFile)}
-        onClose={() => setActiveDiffFile(null)}
-      >
-        <Descriptions column={1} size="small" bordered>
-          <Descriptions.Item label="变更类型">{activeDiffFile?.changeType}</Descriptions.Item>
-          <Descriptions.Item label="文件角色">{activeDiffFile?.fileRole}</Descriptions.Item>
-          <Descriptions.Item label="变更行数">
-            +{activeDiffFile?.additions || 0} / -{activeDiffFile?.deletions || 0}
-          </Descriptions.Item>
-          <Descriptions.Item label="初判原因">{activeDiffFile?.initialRiskReason || "-"}</Descriptions.Item>
-        </Descriptions>
-        <Divider />
-        <pre className="json-box">{activeDiffFile?.patch || "暂无 Patch 内容"}</pre>
       </Drawer>
 
       <Drawer title={activeChunk?.chunkId} width={620} open={Boolean(activeChunk)} onClose={() => setActiveChunk(null)}>
@@ -1160,266 +1033,6 @@ function App() {
     setEditingDraft(draft);
     draftForm.setFieldsValue(draftToForm(draft));
   }
-
-  function renderDiffStep() {
-    const sourceOptions = diffSources.map((source) => ({
-      value: source.documentId,
-      label: `${source.documentTitle || source.documentId} / ${source.requirementExtractId || "无需求解析结果"}`
-    }));
-    const branchOptions = diffBranches.map((branch) => ({ value: branch }));
-
-    const taskColumns: ColumnsType<DiffAnalysisTaskVO> = [
-      { title: "任务编码", dataIndex: "taskCode", width: 180 },
-      { title: "仓库", dataIndex: "repoName", width: 160, render: (value, record) => value || record.repoUrl },
-      { title: "源分支", dataIndex: "sourceBranch", width: 180 },
-      { title: "目标分支", dataIndex: "targetBranch", width: 120 },
-      { title: "状态", dataIndex: "status", width: 110, render: (value) => <StatusTag value={value} /> },
-      { title: "准入", dataIndex: "mergeGateStatus", width: 130, render: (value) => <GateTag value={value} /> },
-      { title: "高风险", dataIndex: "highRiskCount", width: 90 },
-      { title: "未覆盖", dataIndex: "notCoveredRiskCount", width: 90 },
-      {
-        title: "操作",
-        width: 120,
-        fixed: "right",
-        render: (_, record) => (
-          <Button size="small" onClick={() => loadDiffReport(record.taskId)}>
-            查看报告
-          </Button>
-        )
-      }
-    ];
-
-    const changedFileColumns: ColumnsType<DiffChangedFileVO> = [
-      { title: "文件路径", dataIndex: "newFilePath", render: (value) => <Text>{value}</Text> },
-      { title: "类型", dataIndex: "changeType", width: 110, render: (value) => <Tag>{value}</Tag> },
-      { title: "角色", dataIndex: "fileRole", width: 130, render: (value) => <Tag color="blue">{value || "-"}</Tag> },
-      { title: "行数", width: 110, render: (_, record) => <Text>+{record.additions} / -{record.deletions}</Text> },
-      { title: "初判", dataIndex: "initialRiskLevel", width: 110, render: (value) => <RiskLevelTag value={value} /> },
-      {
-        title: "操作",
-        width: 90,
-        render: (_, record) => (
-          <Button size="small" onClick={() => setActiveDiffFile(record)}>
-            Patch
-          </Button>
-        )
-      }
-    ];
-
-    const riskColumns: ColumnsType<DiffRiskItemVO> = [
-      { title: "风险标题", dataIndex: "riskTitle", width: 280, render: (value) => <Text strong>{value}</Text> },
-      { title: "等级", dataIndex: "riskLevel", width: 100, render: (value) => <RiskLevelTag value={value} /> },
-      { title: "分类", dataIndex: "riskCategory", width: 120, render: (value) => <Tag>{value}</Tag> },
-      { title: "覆盖", dataIndex: "coverageStatus", width: 140, render: (value) => <CoverageTag value={value} /> },
-      { title: "处理", dataIndex: "processStatus", width: 120, render: (value) => <StatusTag value={value} /> },
-      {
-        title: "匹配用例",
-        width: 180,
-        render: (_, record) => record.matchedCases?.length ? `${record.matchedCases.length} 条` : "-"
-      },
-      {
-        title: "操作",
-        width: 300,
-        fixed: "right",
-        render: (_, record) => (
-          <Space wrap>
-            <Button size="small" onClick={() => applyRiskAction(record, "CONFIRM")}>
-              确认
-            </Button>
-            <Button size="small" onClick={() => generateSupplementCases(record)}>
-              生成补充用例
-            </Button>
-            <Button size="small" onClick={() => applyRiskAction(record, "MARK_PASS")}>
-              通过
-            </Button>
-            <Button size="small" danger onClick={() => applyRiskAction(record, "IGNORE")}>
-              忽略
-            </Button>
-          </Space>
-        )
-      }
-    ];
-
-    return (
-      <div className="stack">
-        <Card className="panel-card" title="创建 Diff 分析任务">
-          <Form
-            form={diffForm}
-            layout="vertical"
-            initialValues={{
-              documentId,
-              requirementExtractId: requirementExtract?.requirementExtractId,
-              targetBranch: "master",
-              includeTestFiles: false,
-              enableAiAnalysis: true,
-              enableCoverageCheck: true,
-              autoGenerateSupplementCases: false
-            }}
-          >
-            <Row gutter={[16, 0]}>
-              <Col xs={24}>
-                <Form.Item label="最近需求来源">
-                  <Select
-                    allowClear
-                    showSearch
-                    placeholder="可选择最近一次文档和需求解析结果"
-                    options={sourceOptions}
-                    optionFilterProp="label"
-                    onChange={(value) => {
-                      const source = diffSources.find((item) => item.documentId === value);
-                      if (source) {
-                        diffForm.setFieldsValue({
-                          documentId: source.documentId,
-                          requirementExtractId: source.requirementExtractId
-                        });
-                      }
-                    }}
-                    dropdownRender={(menu) => (
-                      <>
-                        {menu}
-                        <Divider style={{ margin: "8px 0" }} />
-                        <Button type="link" icon={<ReloadOutlined />} loading={busy === "diff-sources"} onClick={refreshDiffSources}>
-                          刷新最近来源
-                        </Button>
-                      </>
-                    )}
-                  />
-                </Form.Item>
-              </Col>
-              <Col xs={24} md={12}>
-                <Form.Item name="documentId" label="关联文档">
-                  <Input placeholder={documentId || "留空时自动使用最近一次需求来源"} />
-                </Form.Item>
-              </Col>
-              <Col xs={24} md={12}>
-                <Form.Item name="requirementExtractId" label="需求解析结果">
-                  <Input placeholder={requirementExtract?.requirementExtractId || "留空时自动匹配文档最近一次解析结果"} />
-                </Form.Item>
-              </Col>
-              <Col xs={24}>
-                <Form.Item name="repoUrl" label="仓库地址" rules={[{ required: true, message: "请输入 Git 仓库地址或本地仓库路径" }]}>
-                  <Input placeholder="https://github.com/acai1998/AI-TestOps.git" />
-                </Form.Item>
-                <Button icon={<ReloadOutlined />} loading={busy === "diff-branches"} onClick={refreshRepositoryBranches}>
-                  获取仓库分支
-                </Button>
-              </Col>
-              <Col xs={24} md={12}>
-                <Form.Item name="sourceBranch" label="变更分支（待分析）" rules={[{ required: true, message: "请输入变更分支" }]}>
-                  <AutoComplete options={branchOptions} placeholder="feature/diff-analysis-task" filterOption />
-                </Form.Item>
-              </Col>
-              <Col xs={24} md={12}>
-                <Form.Item name="targetBranch" label="基准分支（主分支）">
-                  <AutoComplete options={branchOptions} placeholder="master 或 main" filterOption />
-                </Form.Item>
-              </Col>
-              <Col xs={24}>
-                <Space wrap>
-                  <Form.Item name="includeTestFiles" valuePropName="checked" noStyle>
-                    <Checkbox>包含测试文件</Checkbox>
-                  </Form.Item>
-                  <Form.Item name="enableAiAnalysis" valuePropName="checked" noStyle>
-                    <Checkbox>启用 AI 风险分析</Checkbox>
-                  </Form.Item>
-                  <Form.Item name="enableCoverageCheck" valuePropName="checked" noStyle>
-                    <Checkbox>启用用例覆盖匹配</Checkbox>
-                  </Form.Item>
-                  <Form.Item name="autoGenerateSupplementCases" valuePropName="checked" noStyle>
-                    <Checkbox>自动生成补充用例</Checkbox>
-                  </Form.Item>
-                </Space>
-              </Col>
-            </Row>
-            <Divider />
-            <Space wrap>
-              <Button type="primary" icon={<PlayCircleOutlined />} loading={busy === "diff-create"} onClick={createDiffTask}>
-                开始分析
-              </Button>
-              <Button icon={<ReloadOutlined />} onClick={refreshDiffTasks}>
-                刷新任务
-              </Button>
-            </Space>
-          </Form>
-        </Card>
-
-        <Card className="panel-card" title="Diff 分析任务">
-          <Table<DiffAnalysisTaskVO>
-            rowKey="taskId"
-            columns={taskColumns}
-            dataSource={diffTasks}
-            locale={{ emptyText: <Empty description="暂无 Diff 分析任务" /> }}
-            pagination={{ pageSize: 6 }}
-            scroll={{ x: 1100 }}
-          />
-        </Card>
-
-        {diffReport && (
-          <>
-            <Card className="panel-card" title="合并准入报告">
-              <Row gutter={[16, 16]}>
-                <Col xs={12} md={6}>
-                  <Statistic title="准入结论" value={diffReport.report?.gateStatus || diffReport.task.mergeGateStatus || "-"} />
-                </Col>
-                <Col xs={12} md={6}>
-                  <Statistic title="变更文件" value={diffReport.report?.changedFileCount || diffReport.changedFiles.length} suffix="个" />
-                </Col>
-                <Col xs={12} md={6}>
-                  <Statistic title="高风险" value={diffReport.report?.highRiskCount || 0} suffix="项" />
-                </Col>
-                <Col xs={12} md={6}>
-                  <Statistic title="未覆盖" value={diffReport.report?.notCoveredRiskCount || 0} suffix="项" />
-                </Col>
-              </Row>
-              <Divider />
-              <Alert type={diffReport.report?.gateStatus === "BLOCK" ? "error" : "info"} showIcon message={diffReport.report?.gateReason || "暂无准入原因"} />
-            </Card>
-
-            <Card className="panel-card" title="变更文件">
-              <Table<DiffChangedFileVO>
-                rowKey="changedFileId"
-                columns={changedFileColumns}
-                dataSource={diffReport.changedFiles}
-                pagination={{ pageSize: 5 }}
-                scroll={{ x: 880 }}
-              />
-            </Card>
-
-            <Card className="panel-card" title="风险与覆盖分析">
-              <Table<DiffRiskItemVO>
-                rowKey="riskId"
-                columns={riskColumns}
-                dataSource={diffReport.riskList}
-                expandable={{
-                  expandedRowRender: (record) => (
-                    <div className="stack">
-                      <Paragraph>{record.riskReason}</Paragraph>
-                      <Text type="secondary">{record.coverageReason}</Text>
-                      <List
-                        size="small"
-                        dataSource={record.matchedCases || []}
-                        locale={{ emptyText: "暂无匹配用例" }}
-                        renderItem={(item) => (
-                          <List.Item>
-                            <Space direction="vertical" size={0}>
-                              <Text strong>{item.caseTitle || item.caseId}</Text>
-                              <Text type="secondary">{item.judgementReason}</Text>
-                            </Space>
-                          </List.Item>
-                        )}
-                      />
-                    </div>
-                  )
-                }}
-                pagination={{ pageSize: 6 }}
-                scroll={{ x: 1220 }}
-              />
-            </Card>
-          </>
-        )}
-      </div>
-    );
-  }
 }
 
 function validateFile(file: File) {
@@ -1491,49 +1104,9 @@ function StatusTag({ value }: { value?: string }) {
     PROCESSING: "blue",
     PENDING: "gold",
     APPROVED: "green",
-    REJECTED: "red",
-    RUNNING: "blue",
-    WAIT_CASE: "orange",
-    WAIT_TEST: "orange",
-    PASSED: "green",
-    BLOCKED: "red",
-    CLOSED: "default",
-    CONFIRMED: "blue",
-    IGNORED: "default"
+    REJECTED: "red"
   };
   return <Tag color={value ? colorMap[value] || "default" : "default"}>{value || "未开始"}</Tag>;
-}
-
-function RiskLevelTag({ value }: { value?: string }) {
-  const colorMap: Record<string, string> = {
-    HIGH: "red",
-    MEDIUM: "orange",
-    LOW: "green",
-    P0: "red",
-    P1: "orange",
-    P2: "green"
-  };
-  return <Tag color={value ? colorMap[value] || "default" : "default"}>{value || "-"}</Tag>;
-}
-
-function CoverageTag({ value }: { value?: string }) {
-  const colorMap: Record<string, string> = {
-    COVERED: "green",
-    PARTIAL_COVERED: "orange",
-    NOT_COVERED: "red",
-    NEED_CONFIRM: "blue"
-  };
-  return <Tag color={value ? colorMap[value] || "default" : "default"}>{value || "-"}</Tag>;
-}
-
-function GateTag({ value }: { value?: string }) {
-  const colorMap: Record<string, string> = {
-    PASS: "green",
-    WARNING: "orange",
-    BLOCK: "red",
-    MANUAL_REVIEW: "blue"
-  };
-  return <Tag color={value ? colorMap[value] || "default" : "default"}>{value || "-"}</Tag>;
 }
 
 function RiskTag({ value }: { value?: string }) {
