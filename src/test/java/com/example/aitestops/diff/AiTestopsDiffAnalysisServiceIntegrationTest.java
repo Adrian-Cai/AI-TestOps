@@ -85,9 +85,10 @@ class AiTestopsDiffAnalysisServiceIntegrationTest {
         Path repo = createLocalRepositoryWithFeatureDiff("repo-document-fallback");
         saveFormalCase("TCDB_DIFF_DOC_ONLY", "DOC_DIFF_DOC_ONLY", "REXT_OLD",
                 "OrderService Service file change risk regression", "[\"Service\",\"OrderService\",\"file change\"]");
+        DiffAnalysisTaskCreateRequest request = baseRequest(repo, "DOC_DIFF_DOC_ONLY", null);
 
         DiffAnalysisReportVO report = diffAnalysisTaskService.getReport(
-                diffAnalysisTaskService.createAndAnalyze(baseRequest(repo, "DOC_DIFF_DOC_ONLY", "REXT_NEW")).getTaskId());
+                diffAnalysisTaskService.createAndAnalyze(request).getTaskId());
 
         assertThat(report.getRiskList()).hasSize(1);
         assertThat(report.getRiskList().get(0).getMatchedCases()).isNotEmpty();
@@ -122,6 +123,8 @@ class AiTestopsDiffAnalysisServiceIntegrationTest {
     @Test
     void autoGenerateSupplementCasesShouldCreateDraftForUncoveredRisk() throws Exception {
         Path repo = createLocalRepositoryWithFeatureDiff("repo-auto-supplement");
+        saveDocument("DOC_DIFF_AUTO_CASE", "自动补充用例需求");
+        saveRequirementExtract("REXT_DIFF_AUTO_CASE", "DOC_DIFF_AUTO_CASE", LocalDateTime.now());
         DiffAnalysisTaskCreateRequest request = baseRequest(repo, "DOC_DIFF_AUTO_CASE", "REXT_DIFF_AUTO_CASE");
         request.getAnalysisOptions().setAutoGenerateSupplementCases(true);
 
@@ -139,6 +142,8 @@ class AiTestopsDiffAnalysisServiceIntegrationTest {
     @Test
     void enableAiAnalysisShouldPersistGenerationRecordWithoutChangingRuleRiskFlow() throws Exception {
         Path repo = createLocalRepositoryWithFeatureDiff("repo-ai-analysis-record");
+        saveDocument("DOC_DIFF_AI", "AI 风险分析需求");
+        saveRequirementExtract("REXT_DIFF_AI", "DOC_DIFF_AI", LocalDateTime.now());
         DiffAnalysisTaskCreateRequest request = baseRequest(repo, "DOC_DIFF_AI", "REXT_DIFF_AI");
         request.getAnalysisOptions().setEnableAiAnalysis(true);
 
@@ -234,6 +239,7 @@ class AiTestopsDiffAnalysisServiceIntegrationTest {
     }
 
     private AiTestopsTestCase saveFormalCase(String testCaseId, String documentId, String requirementExtractId, String title, String riskTagsJson) {
+        ensureDocumentAndExtract(documentId, requirementExtractId);
         AiTestopsTestCase testCase = new AiTestopsTestCase();
         testCase.setTestCaseId(testCaseId);
         testCase.setSourceDraftCaseId("DRAFT_" + testCaseId);
@@ -255,6 +261,20 @@ class AiTestopsDiffAnalysisServiceIntegrationTest {
         testCase.setUpdatedAt(LocalDateTime.now());
         testCaseService.save(testCase);
         return testCase;
+    }
+
+    private void ensureDocumentAndExtract(String documentId, String requirementExtractId) {
+        if (documentService.getOne(new LambdaQueryWrapper<AiTestopsDocument>()
+                .eq(AiTestopsDocument::getDocumentId, documentId)
+                .last("limit 1"), false) == null) {
+            saveDocument(documentId, "测试需求 " + documentId);
+        }
+        if (requirementExtractId != null && !requirementExtractId.isBlank()
+                && requirementExtractService.getOne(new LambdaQueryWrapper<AiTestopsRequirementExtract>()
+                .eq(AiTestopsRequirementExtract::getRequirementExtractId, requirementExtractId)
+                .last("limit 1"), false) == null) {
+            saveRequirementExtract(requirementExtractId, documentId, LocalDateTime.now());
+        }
     }
 
     private void saveDocument(String documentId, String title) {
