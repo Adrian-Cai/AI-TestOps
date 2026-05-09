@@ -36,19 +36,11 @@ class AiTestopsDiffAnalysisServiceIntegrationTest {
 
     @Test
     void createAndAnalyzeShouldPersistChangedFilesRisksCoverageAndGateReport() throws Exception {
-        Path repo = createLocalRepositoryWithFeatureDiff();
-        saveFormalCase();
+        Path repo = createLocalRepositoryWithFeatureDiff("repo-basic");
+        saveFormalCase("TCDB_DIFF_001", "DOC_DIFF_001", "REXT_DIFF_001",
+                "OrderService Service business logic change regression", "[\"business logic\",\"Service\",\"OrderService\"]");
 
-        DiffAnalysisTaskCreateRequest request = new DiffAnalysisTaskCreateRequest();
-        request.setDocumentId("DOC_DIFF_001");
-        request.setRequirementExtractId("REXT_DIFF_001");
-        request.setRepoUrl(repo.toString());
-        request.setSourceBranch("feature/diff-risk");
-        request.setTargetBranch("master");
-        DiffAnalysisOptions options = new DiffAnalysisOptions();
-        options.setEnableCoverageCheck(true);
-        options.setEnableAiAnalysis(false);
-        request.setAnalysisOptions(options);
+        DiffAnalysisTaskCreateRequest request = baseRequest(repo, "DOC_DIFF_001", "REXT_DIFF_001");
 
         DiffAnalysisTaskVO task = diffAnalysisTaskService.createAndAnalyze(request);
         DiffAnalysisReportVO report = diffAnalysisTaskService.getReport(task.getTaskId());
@@ -62,8 +54,36 @@ class AiTestopsDiffAnalysisServiceIntegrationTest {
         assertThat(report.getReport().getGateStatus()).isIn("PASS", "WARNING", "BLOCK", "MANUAL_REVIEW");
     }
 
-    private Path createLocalRepositoryWithFeatureDiff() throws Exception {
-        Path repo = tempDir.resolve("repo");
+    @Test
+    void createAndAnalyzeShouldMatchCasesByDocumentWhenRequirementIdDiffers() throws Exception {
+        Path repo = createLocalRepositoryWithFeatureDiff("repo-document-fallback");
+        saveFormalCase("TCDB_DIFF_DOC_ONLY", "DOC_DIFF_DOC_ONLY", "REXT_OLD",
+                "OrderService Service file change risk regression", "[\"Service\",\"OrderService\",\"file change\"]");
+
+        DiffAnalysisReportVO report = diffAnalysisTaskService.getReport(
+                diffAnalysisTaskService.createAndAnalyze(baseRequest(repo, "DOC_DIFF_DOC_ONLY", "REXT_NEW")).getTaskId());
+
+        assertThat(report.getRiskList()).hasSize(1);
+        assertThat(report.getRiskList().get(0).getMatchedCases()).isNotEmpty();
+        assertThat(report.getRiskList().get(0).getCoverageStatus()).isIn("COVERED", "PARTIAL_COVERED");
+    }
+
+    private DiffAnalysisTaskCreateRequest baseRequest(Path repo, String documentId, String requirementExtractId) {
+        DiffAnalysisTaskCreateRequest request = new DiffAnalysisTaskCreateRequest();
+        request.setDocumentId(documentId);
+        request.setRequirementExtractId(requirementExtractId);
+        request.setRepoUrl(repo.toString());
+        request.setSourceBranch("feature/diff-risk");
+        request.setTargetBranch("master");
+        DiffAnalysisOptions options = new DiffAnalysisOptions();
+        options.setEnableCoverageCheck(true);
+        options.setEnableAiAnalysis(false);
+        request.setAnalysisOptions(options);
+        return request;
+    }
+
+    private Path createLocalRepositoryWithFeatureDiff(String repoName) throws Exception {
+        Path repo = tempDir.resolve(repoName);
         Files.createDirectories(repo);
         run(repo.getParent(), "git", "init", "-b", "master", repo.toString());
         run(repo, "git", "config", "user.email", "qa@example.com");
@@ -80,23 +100,23 @@ class AiTestopsDiffAnalysisServiceIntegrationTest {
         return repo;
     }
 
-    private void saveFormalCase() {
+    private void saveFormalCase(String testCaseId, String documentId, String requirementExtractId, String title, String riskTagsJson) {
         AiTestopsTestCase testCase = new AiTestopsTestCase();
-        testCase.setTestCaseId("TCDB_DIFF_001");
-        testCase.setSourceDraftCaseId("DRAFT_DIFF_001");
-        testCase.setCaseId("TC_DIFF_001");
-        testCase.setGenerationId("GEN_DIFF_001");
-        testCase.setDocumentId("DOC_DIFF_001");
-        testCase.setRequirementExtractId("REXT_DIFF_001");
-        testCase.setTitle("OrderService 业务逻辑变更回归");
+        testCase.setTestCaseId(testCaseId);
+        testCase.setSourceDraftCaseId("DRAFT_" + testCaseId);
+        testCase.setCaseId(testCaseId.replace("TCDB", "TC"));
+        testCase.setGenerationId("GEN_" + testCaseId);
+        testCase.setDocumentId(documentId);
+        testCase.setRequirementExtractId(requirementExtractId);
+        testCase.setTitle(title);
         testCase.setPreconditionsJson("[]");
-        testCase.setStepsJson("[{\"step_no\":1,\"action\":\"验证 OrderService 业务逻辑\"}]");
-        testCase.setExpectedResultsJson("[\"业务逻辑符合预期\"]");
+        testCase.setStepsJson("[{\"step_no\":1,\"action\":\"Verify OrderService Service change\"}]");
+        testCase.setExpectedResultsJson("[\"OrderService behavior matches expected result\"]");
         testCase.setPriority("P1");
         testCase.setCaseType("NORMAL");
         testCase.setRiskLevel("P1");
         testCase.setRequirementRefsJson("[\"REQ_DIFF_001\"]");
-        testCase.setRiskTagsJson("[\"业务逻辑\",\"Service\"]");
+        testCase.setRiskTagsJson(riskTagsJson);
         testCase.setStatus("ACTIVE");
         testCase.setCreatedAt(LocalDateTime.now());
         testCase.setUpdatedAt(LocalDateTime.now());

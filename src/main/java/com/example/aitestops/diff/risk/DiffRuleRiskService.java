@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -27,6 +28,9 @@ public class DiffRuleRiskService {
     private final ObjectMapper objectMapper;
 
     public RuleRiskDecision decide(AiTestopsDiffChangedFile file) {
+        if (shouldSkipRisk(file)) {
+            return null;
+        }
         DiffFileRoleEnum role = DiffFileRoleEnum.valueOf(file.getFileRole());
         if (DiffChangeTypeEnum.DELETED.name().equals(file.getChangeType())) {
             return new RuleRiskDecision(DiffRiskLevelEnum.HIGH.name(), "兼容性风险", "删除文件可能影响依赖该文件的功能");
@@ -84,5 +88,30 @@ public class DiffRuleRiskService {
     }
 
     public record RuleRiskDecision(String riskLevel, String riskCategory, String reason) {
+    }
+
+    private boolean shouldSkipRisk(AiTestopsDiffChangedFile file) {
+        if (file == null || file.getNewFilePath() == null) {
+            return true;
+        }
+        String path = file.getNewFilePath().replace('\\', '/').toLowerCase(Locale.ROOT);
+        String fileName = path.contains("/") ? path.substring(path.lastIndexOf('/') + 1) : path;
+        if (path.startsWith("docs/") || path.endsWith(".md") || path.endsWith(".markdown")) {
+            return true;
+        }
+        if (path.startsWith("src/main/resources/static/assets/")
+                || path.startsWith("frontend/dist/")
+                || path.contains("/node_modules/")
+                || path.contains("/target/")
+                || path.contains("/build/")) {
+            return true;
+        }
+        if (fileName.matches(".*\\.(png|jpg|jpeg|gif|svg|ico|webp|map|woff|woff2|ttf|eot)$")) {
+            return true;
+        }
+        if (fileName.equals("package-lock.json") || fileName.equals("pnpm-lock.yaml") || fileName.equals("yarn.lock")) {
+            return true;
+        }
+        return "git".equals(fileName);
     }
 }

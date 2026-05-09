@@ -47,6 +47,13 @@ class DiffRuleAndGateTest {
     }
 
     @Test
+    void ruleRiskShouldIgnoreDocsAndGeneratedStaticAssets() {
+        assertThat(riskService.decide(file("docs/Diff/module.md", DiffFileRoleEnum.OTHER.name(), "MARKDOWN"))).isNull();
+        assertThat(riskService.decide(file("src/main/resources/static/assets/index-abc123.js", DiffFileRoleEnum.OTHER.name(), "JAVASCRIPT"))).isNull();
+        assertThat(riskService.decide(file("src/main/java/demo/OrderService.java", DiffFileRoleEnum.SERVICE.name(), "JAVA"))).isNotNull();
+    }
+
+    @Test
     void gateShouldBlockHighRiskNotCoveredAndPassCoveredRisks() {
         AiTestopsDiffRiskItem highNotCovered = risk(DiffRiskLevelEnum.HIGH.name(), DiffCoverageStatusEnum.NOT_COVERED.name(), DiffRiskProcessStatusEnum.PENDING.name());
         AiTestopsDiffRiskItem mediumNotCovered = risk(DiffRiskLevelEnum.MEDIUM.name(), DiffCoverageStatusEnum.NOT_COVERED.name(), DiffRiskProcessStatusEnum.PENDING.name());
@@ -63,5 +70,15 @@ class DiffRuleAndGateTest {
         risk.setCoverageStatus(coverage);
         risk.setProcessStatus(processStatus);
         return risk;
+    }
+
+    private AiTestopsDiffChangedFile file(String path, String role, String language) {
+        AiTestopsDiffChangedFile file = new AiTestopsDiffChangedFile();
+        file.setNewFilePath(path);
+        file.setChangeType("MODIFIED");
+        file.setFileRole(role);
+        file.setLanguage(language);
+        file.setChanges(8);
+        return file;
     }
 }

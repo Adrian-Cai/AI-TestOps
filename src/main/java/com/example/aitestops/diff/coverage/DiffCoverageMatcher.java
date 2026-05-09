@@ -14,6 +14,8 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -24,7 +26,11 @@ import java.util.Set;
 public class DiffCoverageMatcher {
 
     private static final BigDecimal COVERED_THRESHOLD = new BigDecimal("0.5500");
-    private static final BigDecimal PARTIAL_THRESHOLD = new BigDecimal("0.2500");
+    private static final BigDecimal PARTIAL_THRESHOLD = new BigDecimal("0.2000");
+    private static final Set<String> NOISE_TOKENS = new HashSet<>(Arrays.asList(
+            "src", "main", "java", "com", "example", "aitestops", "file", "role",
+            "rule", "risk", "diff", "modified", "added", "deleted", "renamed"
+    ));
 
     private final AiTestopsTestCaseService testCaseService;
 
@@ -71,7 +77,12 @@ public class DiffCoverageMatcher {
         LambdaQueryWrapper<AiTestopsTestCase> wrapper = new LambdaQueryWrapper<AiTestopsTestCase>()
                 .eq(AiTestopsTestCase::getStatus, "ACTIVE")
                 .orderByDesc(AiTestopsTestCase::getCreatedAt);
-        if (StringUtils.hasText(risk.getRequirementExtractId())) {
+        if (StringUtils.hasText(risk.getRequirementExtractId()) && StringUtils.hasText(risk.getDocumentId())) {
+            wrapper.and(item -> item
+                    .eq(AiTestopsTestCase::getRequirementExtractId, risk.getRequirementExtractId())
+                    .or()
+                    .eq(AiTestopsTestCase::getDocumentId, risk.getDocumentId()));
+        } else if (StringUtils.hasText(risk.getRequirementExtractId())) {
             wrapper.eq(AiTestopsTestCase::getRequirementExtractId, risk.getRequirementExtractId());
         } else if (StringUtils.hasText(risk.getDocumentId())) {
             wrapper.eq(AiTestopsTestCase::getDocumentId, risk.getDocumentId());
@@ -104,21 +115,28 @@ public class DiffCoverageMatcher {
                 hit++;
             }
         }
-        return BigDecimal.valueOf(hit)
+        BigDecimal recall = BigDecimal.valueOf(hit)
                 .divide(BigDecimal.valueOf(Math.max(1, riskTokens.size())), 4, RoundingMode.HALF_UP);
+        if (hit < 2) {
+            return recall;
+        }
+        BigDecimal compactMatch = BigDecimal.valueOf(hit)
+                .divide(BigDecimal.valueOf(Math.max(1, Math.min(riskTokens.size(), caseTokens.size()))), 4, RoundingMode.HALF_UP);
+        return recall.max(compactMatch);
     }
 
     private Set<String> tokenize(String value) {
-        String normalized = value.toLowerCase(Locale.ROOT)
+        String normalized = splitCamelCase(value).toLowerCase(Locale.ROOT)
                 .replaceAll("[\\[\\]{}\"':,./\\\\()_\\-]+", " ")
                 .replaceAll("\\s+", " ")
                 .trim();
         Set<String> tokens = new LinkedHashSet<>();
         for (String token : normalized.split(" ")) {
-            if (token.length() >= 2) {
+            if (token.length() >= 2 && !NOISE_TOKENS.contains(token)) {
                 tokens.add(token);
             }
         }
+        addRawTokens(value, tokens);
         String compact = normalized.replace(" ", "");
         for (int i = 0; i < compact.length() - 1; i++) {
             char c1 = compact.charAt(i);
@@ -128,6 +146,22 @@ public class DiffCoverageMatcher {
             }
         }
         return tokens;
+    }
+
+    private void addRawTokens(String value, Set<String> tokens) {
+        String normalized = value == null ? "" : value.toLowerCase(Locale.ROOT)
+                .replaceAll("[\\[\\]{}\"':,./\\\\()_\\-]+", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
+        for (String token : normalized.split(" ")) {
+            if (token.length() >= 2 && !NOISE_TOKENS.contains(token)) {
+                tokens.add(token);
+            }
+        }
+    }
+
+    private String splitCamelCase(String value) {
+        return value == null ? "" : value.replaceAll("(?<=[a-z0-9])(?=[A-Z])", " ");
     }
 
     private boolean isChinese(char c) {
