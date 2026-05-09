@@ -14,12 +14,15 @@ import com.example.aitestops.diff.service.AiTestopsDiffAnalysisTaskService;
 import com.example.aitestops.diff.vo.DiffAnalysisReportVO;
 import com.example.aitestops.diff.vo.DiffAnalysisSourceVO;
 import com.example.aitestops.diff.vo.DiffAnalysisTaskVO;
+import com.example.aitestops.diff.vo.DiffSupplementCaseVO;
 import com.example.aitestops.document.entity.AiTestopsDocument;
 import com.example.aitestops.document.service.AiTestopsDocumentService;
+import com.example.aitestops.testcase.dto.TestCaseDraftReviewRequest;
 import com.example.aitestops.testcase.entity.AiTestopsTestCase;
 import com.example.aitestops.testcase.entity.AiTestopsTestCaseDraft;
 import com.example.aitestops.testcase.service.AiTestopsTestCaseDraftService;
 import com.example.aitestops.testcase.service.AiTestopsTestCaseService;
+import com.example.aitestops.testcase.vo.TestCaseVO;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -82,6 +85,23 @@ class AiTestopsDiffAnalysisServiceIntegrationTest {
     }
 
     @Test
+    void createAndAnalyzeShouldIgnoreDocsDirectoryChangedFiles() throws Exception {
+        Path repo = createLocalRepositoryWithDocsAndFeatureDiff("repo-ignore-docs");
+        saveFormalCase("TCDB_DIFF_DOCS_IGNORE", "DOC_DIFF_DOCS_IGNORE", "REXT_DIFF_DOCS_IGNORE",
+                "OrderService Service business logic change regression", "[\"business logic\",\"Service\",\"OrderService\"]");
+
+        DiffAnalysisTaskCreateRequest request = baseRequest(repo, "DOC_DIFF_DOCS_IGNORE", "REXT_DIFF_DOCS_IGNORE");
+
+        DiffAnalysisReportVO report = diffAnalysisTaskService.getReport(
+                diffAnalysisTaskService.createAndAnalyze(request).getTaskId());
+
+        assertThat(report.getChangedFiles()).hasSize(1);
+        assertThat(report.getChangedFiles().get(0).getNewFilePath()).doesNotContain("docs/");
+        assertThat(report.getChangedFiles().get(0).getFileRole()).isEqualTo("SERVICE");
+        assertThat(report.getReport().getChangedFileCount()).isEqualTo(1);
+    }
+
+    @Test
     void createAndAnalyzeShouldMatchCasesByDocumentWhenRequirementIdDiffers() throws Exception {
         Path repo = createLocalRepositoryWithFeatureDiff("repo-document-fallback");
         saveFormalCase("TCDB_DIFF_DOC_ONLY", "DOC_DIFF_DOC_ONLY", "REXT_OLD",
@@ -138,6 +158,32 @@ class AiTestopsDiffAnalysisServiceIntegrationTest {
         assertThat(report.getRiskList().get(0).getCoverageStatus()).isEqualTo("NOT_COVERED");
         assertThat(report.getRiskList().get(0).getProcessStatus()).isEqualTo("WAIT_TEST");
         assertThat(draftCount).isEqualTo(1);
+    }
+
+    @Test
+    void approvingDiffSupplementDraftShouldLinkFormalCaseBackToRisk() throws Exception {
+        Path repo = createLocalRepositoryWithFeatureDiff("repo-approve-supplement-link");
+        saveDocument("DOC_DIFF_APPROVE_SUPPLEMENT", "Diff supplement relation requirement");
+        saveRequirementExtract("REXT_DIFF_APPROVE_SUPPLEMENT", "DOC_DIFF_APPROVE_SUPPLEMENT", LocalDateTime.now());
+        DiffAnalysisTaskCreateRequest request = baseRequest(repo, "DOC_DIFF_APPROVE_SUPPLEMENT", "REXT_DIFF_APPROVE_SUPPLEMENT");
+        DiffAnalysisReportVO report = diffAnalysisTaskService.getReport(
+                diffAnalysisTaskService.createAndAnalyze(request).getTaskId());
+        Long riskId = report.getRiskList().get(0).getRiskId();
+
+        DiffSupplementCaseVO supplement = diffAnalysisTaskService.generateSupplementCases(riskId);
+        TestCaseDraftReviewRequest approveRequest = new TestCaseDraftReviewRequest();
+        approveRequest.setReviewer("qa");
+        TestCaseVO approved = draftService.approveDraft(
+                supplement.getGeneratedCases().get(0).getDraftCaseId(),
+                approveRequest);
+        DiffAnalysisReportVO updated = diffAnalysisTaskService.getReport(report.getTask().getTaskId());
+
+        assertThat(updated.getRiskList().get(0).getCoverageStatus()).isEqualTo("COVERED");
+        assertThat(updated.getRiskList().get(0).getMatchedCases())
+                .extracting("caseId")
+                .contains(approved.getCaseId());
+        assertThat(updated.getReport().getCoveredRiskCount()).isEqualTo(1);
+        assertThat(updated.getReport().getNotCoveredRiskCount()).isZero();
     }
 
     @Test
@@ -236,6 +282,30 @@ class AiTestopsDiffAnalysisServiceIntegrationTest {
         Files.writeString(service, "package demo;\npublic class OrderService { public String status(){ return \"new\"; } }\n", StandardCharsets.UTF_8);
         run(repo, "git", "add", ".");
         run(repo, "git", "commit", "-m", "change service");
+        return repo;
+    }
+
+    private Path createLocalRepositoryWithDocsAndFeatureDiff(String repoName) throws Exception {
+        Path repo = tempDir.resolve(repoName);
+        Files.createDirectories(repo);
+        run(repo.getParent(), "git", "init", "-b", "master", repo.toString());
+        run(repo, "git", "config", "user.email", "qa@example.com");
+        run(repo, "git", "config", "user.name", "qa");
+
+        Path service = repo.resolve("src/main/java/demo/OrderService.java");
+        Path docs = repo.resolve("docs/guide/change-log.md");
+        Files.createDirectories(service.getParent());
+        Files.createDirectories(docs.getParent());
+        Files.writeString(service, "package demo;\npublic class OrderService { public String status(){ return \"old\"; } }\n", StandardCharsets.UTF_8);
+        Files.writeString(docs, "# change log\ninitial\n", StandardCharsets.UTF_8);
+        run(repo, "git", "add", ".");
+        run(repo, "git", "commit", "-m", "initial");
+
+        run(repo, "git", "checkout", "-b", "feature/diff-risk");
+        Files.writeString(service, "package demo;\npublic class OrderService { public String status(){ return \"new\"; } }\n", StandardCharsets.UTF_8);
+        Files.writeString(docs, "# change log\nupdated\n", StandardCharsets.UTF_8);
+        run(repo, "git", "add", ".");
+        run(repo, "git", "commit", "-m", "change service and docs");
         return repo;
     }
 

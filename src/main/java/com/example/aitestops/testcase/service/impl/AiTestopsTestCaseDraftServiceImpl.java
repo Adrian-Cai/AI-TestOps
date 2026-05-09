@@ -27,6 +27,7 @@ import com.example.aitestops.common.exception.ErrorCode;
 import com.example.aitestops.common.util.AiJsonExtractor;
 import com.example.aitestops.common.util.IdGenerator;
 import com.example.aitestops.common.util.JsonUtil;
+import com.example.aitestops.diff.coverage.DiffSupplementCaseLinker;
 import com.example.aitestops.document.entity.AiTestopsDocument;
 import com.example.aitestops.document.entity.AiTestopsDocumentChunk;
 import com.example.aitestops.document.service.AiTestopsDocumentChunkService;
@@ -82,6 +83,7 @@ public class AiTestopsTestCaseDraftServiceImpl
     private final AiTestopsTestCaseService testCaseService;
     private final AiTestopsRequirementCaseMappingService requirementCaseMappingService;
     private final AiTestopsReviewRecordService reviewRecordService;
+    private final DiffSupplementCaseLinker diffSupplementCaseLinker;
     private final AiClient aiClient;
     private final AiModelProperties aiModelProperties;
     private final ObjectMapper objectMapper;
@@ -190,6 +192,10 @@ public class AiTestopsTestCaseDraftServiceImpl
         AiTestopsTestCase testCase = buildFormalCase(draft, now);
         testCaseService.save(testCase);
         saveRequirementMappings(draft, testCase, now);
+        diffSupplementCaseLinker.linkApprovedSupplementCase(
+                draft,
+                testCase,
+                request == null ? null : request.getReviewer());
 
         draft.setReviewStatus(ReviewStatusEnum.APPROVED.name());
         draft.setUpdatedAt(now);

@@ -34,7 +34,6 @@ import com.example.aitestops.diff.enums.DiffFileRoleEnum;
 import com.example.aitestops.diff.enums.DiffMergeGateStatusEnum;
 import com.example.aitestops.diff.enums.DiffRiskLevelEnum;
 import com.example.aitestops.diff.enums.DiffRiskProcessStatusEnum;
-import com.example.aitestops.diff.gate.DiffMergeGateCalculator;
 import com.example.aitestops.diff.git.GitChangedFile;
 import com.example.aitestops.diff.git.GitDiffClient;
 import com.example.aitestops.diff.git.GitDiffResult;
@@ -47,6 +46,7 @@ import com.example.aitestops.diff.service.AiTestopsDiffMergeGateReportService;
 import com.example.aitestops.diff.service.AiTestopsDiffRiskActionRecordService;
 import com.example.aitestops.diff.service.AiTestopsDiffRiskCaseRelService;
 import com.example.aitestops.diff.service.AiTestopsDiffRiskItemService;
+import com.example.aitestops.diff.service.DiffReportRefreshService;
 import com.example.aitestops.diff.vo.DiffAnalysisReportVO;
 import com.example.aitestops.diff.vo.DiffAnalysisSourceVO;
 import com.example.aitestops.diff.vo.DiffAnalysisTaskVO;
@@ -73,6 +73,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -89,12 +90,12 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
     private final DiffFileClassifier fileClassifier;
     private final DiffRuleRiskService ruleRiskService;
     private final DiffCoverageMatcher coverageMatcher;
-    private final DiffMergeGateCalculator gateCalculator;
     private final AiTestopsDiffChangedFileService changedFileService;
     private final AiTestopsDiffRiskItemService riskItemService;
     private final AiTestopsDiffRiskCaseRelService riskCaseRelService;
     private final AiTestopsDiffRiskActionRecordService actionRecordService;
     private final AiTestopsDiffMergeGateReportService reportService;
+    private final DiffReportRefreshService reportRefreshService;
     private final AiTestopsTestCaseService testCaseService;
     private final AiTestopsTestCaseDraftService draftService;
     private final AiTestopsGenerationRecordService generationRecordService;
@@ -326,7 +327,10 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
     private List<AiTestopsDiffChangedFile> saveChangedFiles(AiTestopsDiffAnalysisTask task, GitDiffResult diff, DiffAnalysisOptions options) {
         List<AiTestopsDiffChangedFile> files = new ArrayList<>();
         for (GitChangedFile changed : diff.changedFiles()) {
-            String path = changed.newFilePath();
+            String path = resolveChangedFilePath(changed);
+            if (shouldIgnoreChangedFile(path)) {
+                continue;
+            }
             boolean testFile = fileClassifier.isTestFile(path);
             if (testFile && !Boolean.TRUE.equals(options.getIncludeTestFiles())) {
                 continue;
@@ -355,6 +359,21 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
             changedFileService.saveBatch(files);
         }
         return files;
+    }
+
+    private String resolveChangedFilePath(GitChangedFile changed) {
+        if (changed == null) {
+            return null;
+        }
+        return StringUtils.hasText(changed.newFilePath()) ? changed.newFilePath() : changed.oldFilePath();
+    }
+
+    private boolean shouldIgnoreChangedFile(String path) {
+        if (!StringUtils.hasText(path)) {
+            return true;
+        }
+        String normalized = path.replace('\\', '/').toLowerCase(Locale.ROOT);
+        return normalized.startsWith("docs/") || normalized.contains("/docs/");
     }
 
     private void linkCasesToRisk(AiTestopsDiffRiskItem risk, DiffRiskActionRequest request) {
@@ -528,47 +547,7 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
     }
 
     private void refreshReport(Long taskId) {
-        List<AiTestopsDiffRiskItem> risks = riskItemService.list(new LambdaQueryWrapper<AiTestopsDiffRiskItem>()
-                .eq(AiTestopsDiffRiskItem::getTaskId, taskId));
-        List<AiTestopsDiffChangedFile> files = changedFileService.list(new LambdaQueryWrapper<AiTestopsDiffChangedFile>()
-                .eq(AiTestopsDiffChangedFile::getTaskId, taskId));
-        DiffMergeGateStatusEnum gate = gateCalculator.calculate(risks);
-        AiTestopsDiffMergeGateReport report = reportService.getOne(new LambdaQueryWrapper<AiTestopsDiffMergeGateReport>()
-                .eq(AiTestopsDiffMergeGateReport::getTaskId, taskId)
-                .last("limit 1"), false);
-        if (report == null) {
-            report = new AiTestopsDiffMergeGateReport();
-            report.setTaskId(taskId);
-            report.setReportCode(IdGenerator.diffReportCode());
-        }
-        report.setGateStatus(gate.name());
-        report.setGateReason(buildGateReason(gate, risks));
-        report.setChangedFileCount(files.size());
-        report.setChangedMethodCount(0);
-        report.setHighRiskCount(countRiskLevel(risks, DiffRiskLevelEnum.HIGH.name()));
-        report.setMediumRiskCount(countRiskLevel(risks, DiffRiskLevelEnum.MEDIUM.name()));
-        report.setLowRiskCount(countRiskLevel(risks, DiffRiskLevelEnum.LOW.name()));
-        report.setCoveredRiskCount(countCoverage(risks, DiffCoverageStatusEnum.COVERED.name()));
-        report.setPartialCoveredRiskCount(countCoverage(risks, DiffCoverageStatusEnum.PARTIAL_COVERED.name()));
-        report.setNotCoveredRiskCount(countCoverage(risks, DiffCoverageStatusEnum.NOT_COVERED.name()));
-        report.setNeedConfirmRiskCount(countCoverage(risks, DiffCoverageStatusEnum.NEED_CONFIRM.name()));
-        report.setBlockedRiskCount((int) risks.stream().filter(r -> DiffRiskProcessStatusEnum.BLOCKED.name().equals(r.getProcessStatus())).count());
-        report.setSuggestedCaseCount((int) risks.stream().filter(r -> DiffCoverageStatusEnum.NOT_COVERED.name().equals(r.getCoverageStatus())
-                || DiffCoverageStatusEnum.PARTIAL_COVERED.name().equals(r.getCoverageStatus())).count());
-        report.setSuggestedRegressionModules(JsonUtil.toJson(objectMapper, risks.stream().map(AiTestopsDiffRiskItem::getAffectedModule).filter(Objects::nonNull).distinct().toList()));
-        report.setReportSummary("Diff 分析识别风险 %d 项，准入结论 %s".formatted(risks.size(), gate.name()));
-        report.setReportDetail(JsonUtil.toJson(objectMapper, Map.of("riskCount", risks.size())));
-        report.setCreatedAt(report.getCreatedAt() == null ? LocalDateTime.now() : report.getCreatedAt());
-        if (report.getId() == null) reportService.save(report); else reportService.updateById(report);
-        update(new LambdaUpdateWrapper<AiTestopsDiffAnalysisTask>()
-                .eq(AiTestopsDiffAnalysisTask::getId, taskId)
-                .set(AiTestopsDiffAnalysisTask::getChangedFileCount, files.size())
-                .set(AiTestopsDiffAnalysisTask::getHighRiskCount, report.getHighRiskCount())
-                .set(AiTestopsDiffAnalysisTask::getMediumRiskCount, report.getMediumRiskCount())
-                .set(AiTestopsDiffAnalysisTask::getLowRiskCount, report.getLowRiskCount())
-                .set(AiTestopsDiffAnalysisTask::getNotCoveredRiskCount, report.getNotCoveredRiskCount())
-                .set(AiTestopsDiffAnalysisTask::getMergeGateStatus, gate.name())
-                .set(AiTestopsDiffAnalysisTask::getUpdatedAt, LocalDateTime.now()));
+        reportRefreshService.refresh(taskId);
     }
 
     private String resolveRiskGateImpact(AiTestopsDiffRiskItem risk) {
@@ -885,23 +864,6 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
     private boolean isCoreRole(String role) {
         return List.of(DiffFileRoleEnum.CONTROLLER.name(), DiffFileRoleEnum.SERVICE.name(), DiffFileRoleEnum.DAO.name(),
                 DiffFileRoleEnum.SQL.name(), DiffFileRoleEnum.AUTH.name()).contains(role);
-    }
-
-    private int countRiskLevel(List<AiTestopsDiffRiskItem> risks, String level) {
-        return (int) risks.stream().filter(item -> level.equals(item.getRiskLevel())).count();
-    }
-
-    private int countCoverage(List<AiTestopsDiffRiskItem> risks, String status) {
-        return (int) risks.stream().filter(item -> status.equals(item.getCoverageStatus())).count();
-    }
-
-    private String buildGateReason(DiffMergeGateStatusEnum gate, List<AiTestopsDiffRiskItem> risks) {
-        return switch (gate) {
-            case PASS -> "所有风险均已覆盖或当前无风险项";
-            case WARNING -> "存在中低风险未覆盖或部分覆盖风险，建议关注后合并";
-            case BLOCK -> "存在高风险未覆盖、验证失败或阻塞风险，不建议合并";
-            case MANUAL_REVIEW -> "存在覆盖关系无法自动判断的风险，需要人工评审";
-        };
     }
 
     private String resolveRepoName(String repoUrl) {
