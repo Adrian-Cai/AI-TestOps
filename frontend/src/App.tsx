@@ -94,10 +94,11 @@ const exampleRequirement = `用户可以提交订单。
 4. 同一订单号不能重复提交。
 5. 订单提交成功后状态变为待支付。`;
 
-type StepKey = "input" | "parse" | "generate" | "review" | "export" | "diff";
+type StepKey = "input" | "parse" | "generate" | "review" | "export" | "diff" | "diff-detail";
 type StepStatus = "wait" | "process" | "finish" | "error";
 
 const stepKeys: StepKey[] = ["input", "parse", "generate", "review", "export"];
+const diffStepKeys: StepKey[] = ["diff", "diff-detail"];
 
 const menuItems: MenuProps["items"] = [
   { key: "input", icon: <CloudUploadOutlined />, label: "输入材料" },
@@ -105,7 +106,15 @@ const menuItems: MenuProps["items"] = [
   { key: "generate", icon: <RobotOutlined />, label: "AI 生成" },
   { key: "review", icon: <EditOutlined />, label: "人工确认" },
   { key: "export", icon: <DownloadOutlined />, label: "保存导出" },
-  { key: "diff", icon: <CodeOutlined />, label: "Diff 分析" }
+  {
+    key: "diff-menu",
+    icon: <CodeOutlined />,
+    label: "Diff 分析",
+    children: [
+      { key: "diff", label: "任务与准入报告" },
+      { key: "diff-detail", label: "变更文件和风险覆盖分析" }
+    ]
+  }
 ];
 
 function App() {
@@ -190,6 +199,7 @@ function App() {
   const [diffBranches, setDiffBranches] = useState<string[]>([]);
   const [diffReport, setDiffReport] = useState<DiffAnalysisReportVO | null>(null);
   const [activeDiffFile, setActiveDiffFile] = useState<DiffChangedFileVO | null>(null);
+  const isDiffView = diffStepKeys.includes(currentStep);
 
   const documentId = documentInfo?.documentId;
   const generationId = generationResult?.generationId || requirementExtract?.generationId || generationRecord?.generationId;
@@ -369,6 +379,13 @@ function App() {
       api.listCases({ documentId, requirementExtractId: requirementExtract?.requirementExtractId })
     );
     if (data) setCases(data);
+  };
+
+  const handleMenuClick: MenuProps["onClick"] = ({ key }) => {
+    if (key === "diff-menu") {
+      return;
+    }
+    setCurrentStep(key as StepKey);
   };
 
   const createDiffTask = async () => {
@@ -636,8 +653,9 @@ function App() {
           <Menu
             mode="inline"
             selectedKeys={[currentStep]}
+            defaultOpenKeys={["diff-menu"]}
             items={menuItems}
-            onClick={({ key }) => setCurrentStep(key as StepKey)}
+            onClick={handleMenuClick}
           />
         </Sider>
 
@@ -645,10 +663,10 @@ function App() {
           <div className="content-grid">
             <main className="workbench-main">
               <Card className="step-card">
-                {currentStep === "diff" ? (
+                {isDiffView ? (
                   <Space>
                     <CodeOutlined />
-                    <Text strong>代码 Diff 分析与测试覆盖风险识别</Text>
+                    <Text strong>{currentStep === "diff" ? "代码 Diff 分析与测试覆盖风险识别" : "变更文件和风险覆盖分析"}</Text>
                   </Space>
                 ) : (
                   <Steps
@@ -668,6 +686,7 @@ function App() {
                 {currentStep === "review" && renderReviewStep()}
                 {currentStep === "export" && renderExportStep()}
                 {currentStep === "diff" && renderDiffStep()}
+                {currentStep === "diff-detail" && renderDiffDetailStep()}
               </Spin>
             </main>
 
