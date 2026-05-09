@@ -29,6 +29,10 @@ ai-testops:
   parser:
     chunk-target-size: 40
     chunk-max-size: 60
+  diff:
+    git:
+      allow-local-repository: true
+      allowed-hosts: github.com
   ai:
     provider: MOCK
     model-code: default

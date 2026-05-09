@@ -55,6 +55,18 @@ public final class IdGenerator {
         return next("REV");
     }
 
+    public static String diffTaskCode() {
+        return next("DIFF");
+    }
+
+    public static String diffRiskCode() {
+        return next("RISK");
+    }
+
+    public static String diffReportCode() {
+        return next("GATE");
+    }
+
     private static String next(String prefix) {
         int random = RANDOM.nextInt(1_000_000);
         return "%s_%s_%06d".formatted(prefix, LocalDate.now().format(DATE_FORMATTER), random);
