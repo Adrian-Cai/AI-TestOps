@@ -11,6 +11,7 @@ import com.example.aitestops.diff.vo.DiffAnalysisTaskVO;
 import com.example.aitestops.diff.vo.DiffSupplementCaseVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -32,7 +33,7 @@ public class AiTestopsDiffAnalysisController {
 
     @PostMapping("/tasks")
     @Operation(summary = "创建并执行代码 Diff 分析任务")
-    public ApiResponse<DiffAnalysisTaskVO> createTask(@RequestBody DiffAnalysisTaskCreateRequest request) {
+    public ApiResponse<DiffAnalysisTaskVO> createTask(@Valid @RequestBody DiffAnalysisTaskCreateRequest request) {
         return ApiResponse.success(diffAnalysisTaskService.createAndAnalyze(request));
     }
 
@@ -66,14 +67,14 @@ public class AiTestopsDiffAnalysisController {
 
     @PostMapping("/risks/{riskId}/actions")
     @Operation(summary = "更新风险处理状态")
-    public ApiResponse<Void> applyRiskAction(@PathVariable Long riskId, @RequestBody DiffRiskActionRequest request) {
+    public ApiResponse<Void> applyRiskAction(@PathVariable Long riskId, @Valid @RequestBody DiffRiskActionRequest request) {
         diffAnalysisTaskService.applyRiskAction(riskId, request);
         return ApiResponse.success();
     }
 
     @PostMapping("/risks/{riskId}/verify")
     @Operation(summary = "标记风险验证结果")
-    public ApiResponse<Void> verifyRisk(@PathVariable Long riskId, @RequestBody DiffRiskVerifyRequest request) {
+    public ApiResponse<Void> verifyRisk(@PathVariable Long riskId, @Valid @RequestBody DiffRiskVerifyRequest request) {
         diffAnalysisTaskService.verifyRisk(riskId, request);
         return ApiResponse.success();
     }

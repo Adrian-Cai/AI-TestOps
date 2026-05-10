@@ -1,5 +1,8 @@
 package com.example.aitestops.testcase.dto;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.util.List;
@@ -10,6 +13,10 @@ import java.util.List;
 @Data
 public class TestCaseDraftBatchApproveRequest {
 
+    @NotEmpty(message = "草稿ID列表不能为空")
     private List<String> draftCaseIds;
+
+    @NotBlank(message = "评审人不能为空")
+    @Size(max = 64, message = "评审人不能超过64个字符")
     private String reviewer;
 }
