@@ -153,11 +153,17 @@ class AiTestopsDiffAnalysisServiceIntegrationTest {
         long draftCount = draftService.count(new LambdaQueryWrapper<AiTestopsTestCaseDraft>()
                 .eq(AiTestopsTestCaseDraft::getDocumentId, "DOC_DIFF_AUTO_CASE")
                 .eq(AiTestopsTestCaseDraft::getCaseType, "DIFF_SUPPLEMENT"));
+        AiTestopsTestCaseDraft draft = draftService.getOne(new LambdaQueryWrapper<AiTestopsTestCaseDraft>()
+                .eq(AiTestopsTestCaseDraft::getDocumentId, "DOC_DIFF_AUTO_CASE")
+                .eq(AiTestopsTestCaseDraft::getCaseType, "DIFF_SUPPLEMENT")
+                .last("limit 1"));
 
         assertThat(report.getRiskList()).hasSize(1);
         assertThat(report.getRiskList().get(0).getCoverageStatus()).isEqualTo("NOT_COVERED");
         assertThat(report.getRiskList().get(0).getProcessStatus()).isEqualTo("WAIT_TEST");
         assertThat(draftCount).isEqualTo(1);
+        assertThat(draft.getTitle()).isEqualTo("验证订单核心流程回归");
+        assertThat(draft.getTitle()).doesNotContain("文件变更风险", "src/main/java", "OrderService.java");
     }
 
     @Test

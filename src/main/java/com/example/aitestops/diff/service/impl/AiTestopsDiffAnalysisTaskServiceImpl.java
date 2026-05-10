@@ -86,6 +86,46 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
         extends ServiceImpl<AiTestopsDiffAnalysisTaskMapper, AiTestopsDiffAnalysisTask>
         implements AiTestopsDiffAnalysisTaskService {
 
+    private static final Map<String, String> BUSINESS_TERM_MAP = Map.ofEntries(
+            Map.entry("Order", "订单"),
+            Map.entry("User", "用户"),
+            Map.entry("Payment", "支付"),
+            Map.entry("Product", "商品"),
+            Map.entry("Diff", "Diff"),
+            Map.entry("Report", "报告"),
+            Map.entry("Refresh", "刷新"),
+            Map.entry("Risk", "风险"),
+            Map.entry("Coverage", "覆盖"),
+            Map.entry("Analysis", "分析"),
+            Map.entry("Task", "任务"),
+            Map.entry("Case", "用例"),
+            Map.entry("Supplement", "补充"),
+            Map.entry("Merge", "合并"),
+            Map.entry("Gate", "准入"),
+            Map.entry("Change", "变更"),
+            Map.entry("Changed", "变更"),
+            Map.entry("File", "文件"),
+            Map.entry("Document", "文档"),
+            Map.entry("Requirement", "需求"),
+            Map.entry("Export", "导出"),
+            Map.entry("Generation", "生成"),
+            Map.entry("Validation", "校验"),
+            Map.entry("Review", "评审"),
+            Map.entry("Branch", "分支"),
+            Map.entry("Repository", "仓库"),
+            Map.entry("Parser", "解析"),
+            Map.entry("Chunk", "分块"),
+            Map.entry("Upload", "上传"),
+            Map.entry("Auth", "权限"),
+            Map.entry("Login", "登录"),
+            Map.entry("Role", "角色"),
+            Map.entry("Permission", "权限"),
+            Map.entry("Data", "数据"),
+            Map.entry("Status", "状态"),
+            Map.entry("Message", "消息"),
+            Map.entry("Job", "调度")
+    );
+
     private final GitDiffClient gitDiffClient;
     private final DiffFileClassifier fileClassifier;
     private final DiffRuleRiskService ruleRiskService;
@@ -450,7 +490,7 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
         draft.setGenerationId("DIFF_SUPPLEMENT_" + risk.getId() + "_" + now.toString().replace(":", "").replace("-", ""));
         draft.setDocumentId(task.getDocumentId());
         draft.setRequirementExtractId(task.getRequirementExtractId());
-        draft.setTitle(truncate("补充验证: " + risk.getRiskTitle(), 255));
+        draft.setTitle(buildSupplementCaseTitle(risk));
         draft.setPreconditionsJson(JsonUtil.toJson(objectMapper, List.of("已完成代码 Diff 分析任务 " + task.getTaskCode())));
         draft.setStepsJson(JsonUtil.toJson(objectMapper, List.of(
                 Map.of("step_no", 1, "action", "根据风险说明准备测试数据: " + nullToEmpty(risk.getRiskReason())),
@@ -877,6 +917,89 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
     private String truncate(String value, int maxLength) {
         if (value == null || value.length() <= maxLength) return value;
         return value.substring(0, maxLength);
+    }
+
+    private String buildSupplementCaseTitle(AiTestopsDiffRiskItem risk) {
+        String subject = toBusinessSubject(risk.getAffectedModule());
+        String scenario = toSupplementScenario(risk.getRiskCategory());
+        if (StringUtils.hasText(subject) && StringUtils.hasText(scenario)) {
+            return truncate("验证" + subject + scenario, 255);
+        }
+        if (StringUtils.hasText(subject)) {
+            return truncate("验证" + subject + "变更回归", 255);
+        }
+        if (StringUtils.hasText(risk.getRiskCategory())) {
+            return truncate("验证" + risk.getRiskCategory() + "变更后的业务流程", 255);
+        }
+        return "验证变更影响业务流程";
+    }
+
+    private String toSupplementScenario(String riskCategory) {
+        if (!StringUtils.hasText(riskCategory)) {
+            return "变更回归";
+        }
+        return switch (riskCategory) {
+            case "业务逻辑" -> "核心流程回归";
+            case "接口兼容" -> "接口入参出参兼容";
+            case "数据一致性" -> "数据读写一致性";
+            case "数据结构" -> "数据结构兼容与回滚";
+            case "配置风险" -> "环境配置生效";
+            case "权限风险" -> "权限控制";
+            case "异步消息" -> "消息消费幂等";
+            case "调度风险" -> "定时任务执行";
+            case "代码变更" -> "基础功能回归";
+            default -> riskCategory + "回归";
+        };
+    }
+
+    private String toBusinessSubject(String affectedModule) {
+        if (!StringUtils.hasText(affectedModule)) {
+            return "";
+        }
+        String name = affectedModule.replace('\\', '/');
+        int lastSlash = name.lastIndexOf('/');
+        if (lastSlash >= 0) {
+            name = name.substring(lastSlash + 1);
+        }
+        int extension = name.lastIndexOf('.');
+        if (extension > 0) {
+            name = name.substring(0, extension);
+        }
+        name = removeTechnicalSuffixes(name);
+        List<String> words = splitIdentifierWords(name);
+        if (words.isEmpty()) {
+            return name;
+        }
+        StringBuilder subject = new StringBuilder();
+        for (String word : words) {
+            subject.append(BUSINESS_TERM_MAP.getOrDefault(word, word));
+        }
+        return subject.toString();
+    }
+
+    private String removeTechnicalSuffixes(String name) {
+        String result = name;
+        String previous;
+        do {
+            previous = result;
+            result = result.replaceFirst("(ServiceImpl|Controller|Service|Mapper|Repository|Configuration|Config|DTO|VO|Entity|Request|Response|Client|Calculator|Classifier|Linker)$", "");
+        } while (!result.equals(previous));
+        return result;
+    }
+
+    private List<String> splitIdentifierWords(String value) {
+        if (!StringUtils.hasText(value)) {
+            return List.of();
+        }
+        String normalized = value
+                .replaceAll("([A-Z]+)([A-Z][a-z])", "$1 $2")
+                .replaceAll("([a-z0-9])([A-Z])", "$1 $2")
+                .replaceAll("[^A-Za-z0-9]+", " ")
+                .trim();
+        if (!StringUtils.hasText(normalized)) {
+            return List.of();
+        }
+        return List.of(normalized.split("\\s+"));
     }
 
     private String nullToEmpty(String value) {
