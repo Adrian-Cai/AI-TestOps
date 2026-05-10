@@ -1407,7 +1407,7 @@ function App() {
         width: 90,
         render: (_, record) => (
           <Button size="small" onClick={() => setActiveDiffFile(record)}>
-            Patch
+            查看变更
           </Button>
         )
       }

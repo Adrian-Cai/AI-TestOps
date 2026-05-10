@@ -117,6 +117,25 @@ class AiTestopsDiffAnalysisServiceIntegrationTest {
     }
 
     @Test
+    void createAndAnalyzeShouldAttachSameSourceCasesWhenKeywordMatchIsWeak() throws Exception {
+        Path repo = createLocalRepositoryWithFeatureDiff("repo-same-source-fallback");
+        AiTestopsTestCase testCase = saveFormalCase("TCDB_DIFF_SAME_SOURCE", "DOC_DIFF_SAME_SOURCE", "REXT_DIFF_SAME_SOURCE",
+                "User login happy path", "[\"login\",\"user\"]");
+        DiffAnalysisTaskCreateRequest request = baseRequest(repo, "DOC_DIFF_SAME_SOURCE", "REXT_DIFF_SAME_SOURCE");
+
+        DiffAnalysisReportVO report = diffAnalysisTaskService.getReport(
+                diffAnalysisTaskService.createAndAnalyze(request).getTaskId());
+
+        assertThat(report.getRiskList()).hasSize(1);
+        assertThat(report.getRiskList().get(0).getCoverageStatus()).isEqualTo("PARTIAL_COVERED");
+        assertThat(report.getRiskList().get(0).getMatchedCases())
+                .extracting("caseDbId")
+                .contains(testCase.getId());
+        assertThat(report.getRiskList().get(0).getMatchedCases().get(0).getJudgementReason())
+                .contains("同一需求");
+    }
+
+    @Test
     void linkCaseActionShouldCreateRiskCaseRelationAndUpdateCoverage() throws Exception {
         Path repo = createLocalRepositoryWithFeatureDiff("repo-link-case");
         AiTestopsTestCase testCase = saveFormalCase("TCDB_DIFF_LINK", "DOC_DIFF_LINK", "REXT_DIFF_LINK",

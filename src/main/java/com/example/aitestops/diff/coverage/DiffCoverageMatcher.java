@@ -27,6 +27,7 @@ public class DiffCoverageMatcher {
 
     private static final BigDecimal COVERED_THRESHOLD = new BigDecimal("0.5500");
     private static final BigDecimal PARTIAL_THRESHOLD = new BigDecimal("0.2000");
+    private static final int FALLBACK_RELATION_LIMIT = 5;
     private static final Set<String> NOISE_TOKENS = new HashSet<>(Arrays.asList(
             "src", "main", "java", "com", "example", "aitestops", "file", "role",
             "rule", "risk", "diff", "modified", "added", "deleted", "renamed"
@@ -70,7 +71,30 @@ public class DiffCoverageMatcher {
         if (bestScore.compareTo(PARTIAL_THRESHOLD) >= 0) {
             return new CoverageMatchResult(DiffCoverageStatusEnum.PARTIAL_COVERED.name(), "已有用例覆盖部分风险关键词，仍需补充缺失场景", relations);
         }
-        return new CoverageMatchResult(DiffCoverageStatusEnum.NOT_COVERED.name(), "未找到与风险场景明显匹配的正式测试用例", List.of());
+        return new CoverageMatchResult(DiffCoverageStatusEnum.PARTIAL_COVERED.name(),
+                "未找到明显关键词匹配，已关联同一需求来源的正式测试用例，请人工确认覆盖范围",
+                buildFallbackRelations(risk, cases));
+    }
+
+    private List<AiTestopsDiffRiskCaseRel> buildFallbackRelations(AiTestopsDiffRiskItem risk, List<AiTestopsTestCase> cases) {
+        return cases.stream()
+                .limit(FALLBACK_RELATION_LIMIT)
+                .map(testCase -> {
+                    AiTestopsDiffRiskCaseRel rel = new AiTestopsDiffRiskCaseRel();
+                    rel.setRiskId(risk.getId());
+                    rel.setCaseId(testCase.getId());
+                    rel.setDocumentId(risk.getDocumentId());
+                    rel.setRequirementExtractId(risk.getRequirementExtractId());
+                    rel.setCaseSourceType("REQUIREMENT_GENERATED");
+                    rel.setRelationType("SAME_SOURCE_CANDIDATE_CASE");
+                    rel.setCoverageJudgement(DiffCoverageStatusEnum.NEED_CONFIRM.name());
+                    rel.setJudgementReason("同一需求来源已有正式用例，关键词未明显命中，请人工确认是否覆盖该风险场景: " + testCase.getCaseId());
+                    rel.setSimilarityScore(BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP));
+                    rel.setGeneratedFromAi(0);
+                    rel.setCreatedAt(LocalDateTime.now());
+                    return rel;
+                })
+                .toList();
     }
 
     private List<AiTestopsTestCase> loadCandidateCases(AiTestopsDiffRiskItem risk) {
