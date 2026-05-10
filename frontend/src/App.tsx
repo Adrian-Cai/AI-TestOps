@@ -458,7 +458,7 @@ function App() {
     if (diffReport?.task.taskId !== taskId) {
       setLatestSupplementResult(null);
     }
-    const data = await runAction("diff-report", "\u67e5\u8be2 Diff \u5206\u6790\u62a5\u544a", () => api.getDiffReport(taskId));
+    const data = await runAction("diff-report", "查询 Diff 分析报告", () => api.getDiffReport(taskId));
     if (data) setDiffReport(data);
   };
   const refreshCurrentDiffView = async () => {
@@ -473,11 +473,11 @@ function App() {
   };
 
   const applyRiskAction = async (risk: DiffRiskItemVO, actionType: string) => {
-    const data = await runAction("diff-risk-action", "\u66f4\u65b0\u98ce\u9669\u72b6\u6001", () =>
+    const data = await runAction("diff-risk-action", "更新风险状态", () =>
       api.applyDiffRiskAction(risk.riskId, {
         actionType,
-        actionDesc: actionType === "IGNORE" ? "\u9875\u9762\u5ffd\u7565" : "\u9875\u9762\u64cd\u4f5c",
-        ignoreReason: actionType === "IGNORE" ? "\u4eba\u5de5\u5224\u65ad\u672c\u6b21\u65e0\u9700\u5904\u7406" : undefined,
+        actionDesc: actionType === "IGNORE" ? "页面忽略" : "页面操作",
+        ignoreReason: actionType === "IGNORE" ? "人工判断本次无需处理" : undefined,
         operator: "manual_user"
       })
     );
@@ -487,12 +487,12 @@ function App() {
   };
 
   const generateSupplementCases = async (risk: DiffRiskItemVO) => {
-    const data = await runAction("diff-supplement", "\u751f\u6210\u8865\u5145\u7528\u4f8b", () => api.generateDiffSupplementCases(risk.riskId));
+    const data = await runAction("diff-supplement", "生成补充用例", () => api.generateDiffSupplementCases(risk.riskId));
     if (data) {
       setLatestSupplementResult(data);
       await refreshCurrentDiffView();
       await refreshDrafts({ documentOnly: true });
-      messageApi.success(`\u5df2\u751f\u6210 ${data.generatedCases.length} \u6761\u8865\u5145\u7528\u4f8b\u8349\u7a3f`);
+      messageApi.success(`已生成 ${data.generatedCases.length} 条补充用例草稿`);
     }
   };
   const saveDraft = async () => {
@@ -1202,21 +1202,21 @@ function App() {
   function renderDiffStep() {
     const sourceOptions = diffSources.map((source) => ({
       value: source.documentId,
-      label: `${source.documentTitle || source.documentId} / ${source.requirementExtractId || "\u6682\u65e0\u9700\u6c42\u89e3\u6790\u7ed3\u679c"}`
+      label: `${source.documentTitle || source.documentId} / ${source.requirementExtractId || "暂无需求解析结果"}`
     }));
     const branchOptions = diffBranches.map((branch) => ({ value: branch }));
 
     const taskColumns: ColumnsType<DiffAnalysisTaskVO> = [
-      { title: "\u4efb\u52a1\u7f16\u7801", dataIndex: "taskCode", width: 180 },
-      { title: "\u4ed3\u5e93", dataIndex: "repoName", width: 160, render: (value, record) => value || record.repoUrl },
-      { title: "\u6e90\u5206\u652f", dataIndex: "sourceBranch", width: 180 },
-      { title: "\u76ee\u6807\u5206\u652f", dataIndex: "targetBranch", width: 120 },
-      { title: "\u72b6\u6001", dataIndex: "status", width: 110, render: (value) => <StatusTag value={value} /> },
-      { title: "\u51c6\u5165", dataIndex: "mergeGateStatus", width: 130, render: (value) => <GateTag value={value} /> },
-      { title: "\u9ad8\u98ce\u9669", dataIndex: "highRiskCount", width: 90 },
-      { title: "\u672a\u8986\u76d6", dataIndex: "notCoveredRiskCount", width: 90 },
+      { title: "任务编码", dataIndex: "taskCode", width: 180 },
+      { title: "仓库", dataIndex: "repoName", width: 160, render: (value, record) => value || record.repoUrl },
+      { title: "源分支", dataIndex: "sourceBranch", width: 180 },
+      { title: "目标分支", dataIndex: "targetBranch", width: 120 },
+      { title: "状态", dataIndex: "status", width: 110, render: (value) => <StatusTag value={value} /> },
+      { title: "准入", dataIndex: "mergeGateStatus", width: 130, render: (value) => <GateTag value={value} /> },
+      { title: "高风险", dataIndex: "highRiskCount", width: 90 },
+      { title: "未覆盖", dataIndex: "notCoveredRiskCount", width: 90 },
       {
-        title: "\u64cd\u4f5c",
+        title: "操作",
         width: 120,
         fixed: "right",
         render: (_, record) => (
@@ -1227,7 +1227,7 @@ function App() {
               setCurrentStep("diff");
             }}
           >
-            {"\u67e5\u770b\u62a5\u544a"}
+            {"查看报告"}
           </Button>
         )
       }
@@ -1235,7 +1235,7 @@ function App() {
 
     return (
       <div className="stack">
-        <Card className="panel-card" title="\u521b\u5efa Diff \u5206\u6790\u4efb\u52a1">
+        <Card className="panel-card" title="创建 Diff 分析任务">
           <Form
             form={diffForm}
             layout="vertical"
@@ -1251,11 +1251,11 @@ function App() {
           >
             <Row gutter={[16, 0]}>
               <Col xs={24}>
-                <Form.Item label="\u6700\u8fd1\u9700\u6c42\u6765\u6e90">
+                <Form.Item label="最近需求来源">
                   <Select
                     allowClear
                     showSearch
-                    placeholder="\u53ef\u9009\u62e9\u6700\u8fd1\u4e00\u6b21\u6587\u6863\u548c\u9700\u6c42\u89e3\u6790\u7ed3\u679c"
+                    placeholder="可选择最近一次文档和需求解析结果"
                     options={sourceOptions}
                     optionFilterProp="label"
                     onChange={(value) => {
@@ -1272,7 +1272,7 @@ function App() {
                         {menu}
                         <Divider style={{ margin: "8px 0" }} />
                         <Button type="link" icon={<ReloadOutlined />} loading={busy === "diff-sources"} onClick={refreshDiffSources}>
-                          {"\u5237\u65b0\u6700\u8fd1\u6765\u6e90"}
+                          {"刷新最近来源"}
                         </Button>
                       </>
                     )}
@@ -1280,46 +1280,46 @@ function App() {
                 </Form.Item>
               </Col>
               <Col xs={24} md={12}>
-                <Form.Item name="documentId" label="\u5173\u8054\u6587\u6863">
-                  <Input placeholder={documentId || "\u7559\u7a7a\u65f6\u81ea\u52a8\u4f7f\u7528\u6700\u8fd1\u4e00\u6b21\u9700\u6c42\u6765\u6e90"} />
+                <Form.Item name="documentId" label="关联文档">
+                  <Input placeholder={documentId || "留空时自动使用最近一次需求来源"} />
                 </Form.Item>
               </Col>
               <Col xs={24} md={12}>
-                <Form.Item name="requirementExtractId" label="\u9700\u6c42\u89e3\u6790\u7ed3\u679c">
-                  <Input placeholder={requirementExtract?.requirementExtractId || "\u7559\u7a7a\u65f6\u81ea\u52a8\u5339\u914d\u6587\u6863\u6700\u8fd1\u4e00\u6b21\u89e3\u6790\u7ed3\u679c"} />
+                <Form.Item name="requirementExtractId" label="需求解析结果">
+                  <Input placeholder={requirementExtract?.requirementExtractId || "留空时自动匹配文档最近一次解析结果"} />
                 </Form.Item>
               </Col>
               <Col xs={24}>
-                <Form.Item name="repoUrl" label="\u4ed3\u5e93\u5730\u5740" rules={[{ required: true, message: "\u8bf7\u8f93\u5165 Git \u4ed3\u5e93\u5730\u5740\u6216\u672c\u5730\u4ed3\u5e93\u8def\u5f84" }]}>
+                <Form.Item name="repoUrl" label="仓库地址" rules={[{ required: true, message: "请输入 Git 仓库地址或本地仓库路径" }]}>
                   <Input placeholder="https://github.com/acai1998/AI-TestOps.git" />
                 </Form.Item>
                 <Button icon={<ReloadOutlined />} loading={busy === "diff-branches"} onClick={refreshRepositoryBranches}>
-                  {"\u83b7\u53d6\u4ed3\u5e93\u5206\u652f"}
+                  {"获取仓库分支"}
                 </Button>
               </Col>
               <Col xs={24} md={12}>
-                <Form.Item name="sourceBranch" label="\u53d8\u66f4\u5206\u652f\uff08\u5f85\u5206\u6790\uff09" rules={[{ required: true, message: "\u8bf7\u8f93\u5165\u53d8\u66f4\u5206\u652f" }]}>
+                <Form.Item name="sourceBranch" label="变更分支（待分析）" rules={[{ required: true, message: "请输入变更分支" }]}>
                   <AutoComplete options={branchOptions} placeholder="feature/diff-analysis-task" filterOption />
                 </Form.Item>
               </Col>
               <Col xs={24} md={12}>
-                <Form.Item name="targetBranch" label="\u57fa\u51c6\u5206\u652f\uff08\u4e3b\u5206\u652f\uff09">
-                  <AutoComplete options={branchOptions} placeholder="master \u6216 main" filterOption />
+                <Form.Item name="targetBranch" label="基准分支（主分支）">
+                  <AutoComplete options={branchOptions} placeholder="master 或 main" filterOption />
                 </Form.Item>
               </Col>
               <Col xs={24}>
                 <Space wrap>
                   <Form.Item name="includeTestFiles" valuePropName="checked" noStyle>
-                    <Checkbox>{"\u5305\u542b\u6d4b\u8bd5\u6587\u4ef6"}</Checkbox>
+                    <Checkbox>{"包含测试文件"}</Checkbox>
                   </Form.Item>
                   <Form.Item name="enableAiAnalysis" valuePropName="checked" noStyle>
-                    <Checkbox>{"\u542f\u7528 AI \u98ce\u9669\u5206\u6790"}</Checkbox>
+                    <Checkbox>{"启用 AI 风险分析"}</Checkbox>
                   </Form.Item>
                   <Form.Item name="enableCoverageCheck" valuePropName="checked" noStyle>
-                    <Checkbox>{"\u542f\u7528\u7528\u4f8b\u8986\u76d6\u5339\u914d"}</Checkbox>
+                    <Checkbox>{"启用用例覆盖匹配"}</Checkbox>
                   </Form.Item>
                   <Form.Item name="autoGenerateSupplementCases" valuePropName="checked" noStyle>
-                    <Checkbox>{"\u81ea\u52a8\u751f\u6210\u8865\u5145\u7528\u4f8b"}</Checkbox>
+                    <Checkbox>{"自动生成补充用例"}</Checkbox>
                   </Form.Item>
                 </Space>
               </Col>
@@ -1327,21 +1327,21 @@ function App() {
             <Divider />
             <Space wrap>
               <Button type="primary" icon={<PlayCircleOutlined />} loading={busy === "diff-create"} onClick={createDiffTask}>
-                {"\u5f00\u59cb\u5206\u6790"}
+                {"开始分析"}
               </Button>
               <Button icon={<ReloadOutlined />} onClick={refreshDiffTasks}>
-                {"\u5237\u65b0\u4efb\u52a1"}
+                {"刷新任务"}
               </Button>
             </Space>
           </Form>
         </Card>
 
-        <Card className="panel-card" title="Diff \u5206\u6790\u4efb\u52a1">
+        <Card className="panel-card" title="Diff 分析任务">
           <Table<DiffAnalysisTaskVO>
             rowKey="taskId"
             columns={taskColumns}
             dataSource={diffTasks}
-            locale={{ emptyText: <Empty description="\u6682\u65e0 Diff \u5206\u6790\u4efb\u52a1" /> }}
+            locale={{ emptyText: <Empty description="暂无 Diff 分析任务" /> }}
             pagination={{ pageSize: 6 }}
             scroll={{ x: 1100 }}
           />
@@ -1350,29 +1350,29 @@ function App() {
         {diffReport && (
           <Card
             className="panel-card"
-            title="\u5408\u5e76\u51c6\u5165\u62a5\u544a"
+            title="合并准入报告"
             extra={
               <Button type="link" onClick={() => setCurrentStep("diff-detail")}>
-                {"\u67e5\u770b\u66f4\u591a"}
+                {"查看更多"}
               </Button>
             }
           >
             <Row gutter={[16, 16]}>
               <Col xs={12} md={6}>
-                <Statistic title="\u51c6\u5165\u7ed3\u8bba" value={diffReport.report?.gateStatus || diffReport.task.mergeGateStatus || "-"} />
+                <Statistic title="准入结论" value={diffReport.report?.gateStatus || diffReport.task.mergeGateStatus || "-"} />
               </Col>
               <Col xs={12} md={6}>
-                <Statistic title="\u53d8\u66f4\u6587\u4ef6" value={diffReport.report?.changedFileCount || diffReport.changedFiles.length} suffix="\u4e2a" />
+                <Statistic title="变更文件" value={diffReport.report?.changedFileCount || diffReport.changedFiles.length} suffix="个" />
               </Col>
               <Col xs={12} md={6}>
-                <Statistic title="\u9ad8\u98ce\u9669" value={diffReport.report?.highRiskCount || 0} suffix="\u9879" />
+                <Statistic title="高风险" value={diffReport.report?.highRiskCount || 0} suffix="项" />
               </Col>
               <Col xs={12} md={6}>
-                <Statistic title="\u672a\u8986\u76d6" value={diffReport.report?.notCoveredRiskCount || 0} suffix="\u9879" />
+                <Statistic title="未覆盖" value={diffReport.report?.notCoveredRiskCount || 0} suffix="项" />
               </Col>
             </Row>
             <Divider />
-            <Alert type={diffReport.report?.gateStatus === "BLOCK" ? "error" : "info"} showIcon message={diffReport.report?.gateReason || "\u6682\u65e0\u51c6\u5165\u539f\u56e0"} />
+            <Alert type={diffReport.report?.gateStatus === "BLOCK" ? "error" : "info"} showIcon message={diffReport.report?.gateReason || "暂无准入原因"} />
           </Card>
         )}
       </div>
@@ -1384,26 +1384,26 @@ function App() {
       return (
         <Card
           className="panel-card"
-          title="\u53d8\u66f4\u6587\u4ef6\u548c\u98ce\u9669\u8986\u76d6\u5206\u6790"
+          title="变更文件和风险覆盖分析"
           extra={
             <Button type="link" onClick={() => setCurrentStep("diff")}>
-              {"\u8fd4\u56de\u4efb\u52a1\u4e0e\u51c6\u5165\u62a5\u544a"}
+              {"返回任务与准入报告"}
             </Button>
           }
         >
-          <Empty description="\u8bf7\u5148\u5728\u4efb\u52a1\u4e0e\u51c6\u5165\u62a5\u544a\u9875\u9762\u9009\u62e9\u4e00\u6761 Diff \u5206\u6790\u62a5\u544a" />
+          <Empty description="请先在任务与准入报告页面选择一条 Diff 分析报告" />
         </Card>
       );
     }
 
     const changedFileColumns: ColumnsType<DiffChangedFileVO> = [
-      { title: "\u6587\u4ef6\u8def\u5f84", dataIndex: "newFilePath", render: (value) => <Text>{value}</Text> },
-      { title: "\u7c7b\u578b", dataIndex: "changeType", width: 110, render: (value) => <Tag>{value}</Tag> },
-      { title: "\u89d2\u8272", dataIndex: "fileRole", width: 130, render: (value) => <Tag color="blue">{value || "-"}</Tag> },
-      { title: "\u884c\u6570", width: 110, render: (_, record) => <Text>+{record.additions} / -{record.deletions}</Text> },
-      { title: "\u521d\u5224", dataIndex: "initialRiskLevel", width: 110, render: (value) => <RiskLevelTag value={value} /> },
+      { title: "文件路径", dataIndex: "newFilePath", render: (value) => <Text>{value}</Text> },
+      { title: "类型", dataIndex: "changeType", width: 110, render: (value) => <Tag>{value}</Tag> },
+      { title: "角色", dataIndex: "fileRole", width: 130, render: (value) => <Tag color="blue">{value || "-"}</Tag> },
+      { title: "行数", width: 110, render: (_, record) => <Text>+{record.additions} / -{record.deletions}</Text> },
+      { title: "初判", dataIndex: "initialRiskLevel", width: 110, render: (value) => <RiskLevelTag value={value} /> },
       {
-        title: "\u64cd\u4f5c",
+        title: "操作",
         width: 90,
         render: (_, record) => (
           <Button size="small" onClick={() => setActiveDiffFile(record)}>
@@ -1414,33 +1414,33 @@ function App() {
     ];
 
     const riskColumns: ColumnsType<DiffRiskItemVO> = [
-      { title: "\u98ce\u9669\u6807\u9898", dataIndex: "riskTitle", width: 280, render: (value) => <Text strong>{value}</Text> },
-      { title: "\u7b49\u7ea7", dataIndex: "riskLevel", width: 100, render: (value) => <RiskLevelTag value={value} /> },
-      { title: "\u5206\u7c7b", dataIndex: "riskCategory", width: 120, render: (value) => <Tag>{value}</Tag> },
-      { title: "\u8986\u76d6", dataIndex: "coverageStatus", width: 140, render: (value) => <CoverageTag value={value} /> },
-      { title: "\u5904\u7406", dataIndex: "processStatus", width: 120, render: (value) => <StatusTag value={value} /> },
+      { title: "风险标题", dataIndex: "riskTitle", width: 280, render: (value) => <Text strong>{value}</Text> },
+      { title: "等级", dataIndex: "riskLevel", width: 100, render: (value) => <RiskLevelTag value={value} /> },
+      { title: "分类", dataIndex: "riskCategory", width: 120, render: (value) => <Tag>{value}</Tag> },
+      { title: "覆盖", dataIndex: "coverageStatus", width: 140, render: (value) => <CoverageTag value={value} /> },
+      { title: "处理", dataIndex: "processStatus", width: 120, render: (value) => <StatusTag value={value} /> },
       {
-        title: "\u5339\u914d\u7528\u4f8b",
+        title: "匹配用例",
         width: 180,
-        render: (_, record) => record.matchedCases?.length ? `${record.matchedCases.length} \u6761` : "-"
+        render: (_, record) => record.matchedCases?.length ? `${record.matchedCases.length} 条` : "-"
       },
       {
-        title: "\u64cd\u4f5c",
+        title: "操作",
         width: 300,
         fixed: "right",
         render: (_, record) => (
           <Space wrap>
             <Button size="small" onClick={() => applyRiskAction(record, "CONFIRM")}>
-              {"\u786e\u8ba4"}
+              {"确认"}
             </Button>
             <Button size="small" onClick={() => generateSupplementCases(record)}>
-              {"\u751f\u6210\u8865\u5145\u7528\u4f8b"}
+              {"生成补充用例"}
             </Button>
             <Button size="small" onClick={() => applyRiskAction(record, "MARK_PASS")}>
-              {"\u901a\u8fc7"}
+              {"通过"}
             </Button>
             <Button size="small" danger onClick={() => applyRiskAction(record, "IGNORE")}>
-              {"\u5ffd\u7565"}
+              {"忽略"}
             </Button>
           </Space>
         )
@@ -1451,28 +1451,28 @@ function App() {
       <div className="stack">
         <Card
           className="panel-card"
-          title="\u53d8\u66f4\u6587\u4ef6\u548c\u98ce\u9669\u8986\u76d6\u5206\u6790"
+          title="变更文件和风险覆盖分析"
           extra={
             <Button type="link" onClick={() => setCurrentStep("diff")}>
-              {"\u8fd4\u56de\u4efb\u52a1\u4e0e\u51c6\u5165\u62a5\u544a"}
+              {"返回任务与准入报告"}
             </Button>
           }
         >
           <Row gutter={[16, 16]}>
             <Col xs={24} md={8}>
-              <Statistic title="\u4efb\u52a1\u7f16\u7801" value={diffReport.task.taskCode || "-"} />
+              <Statistic title="任务编码" value={diffReport.task.taskCode || "-"} />
             </Col>
             <Col xs={12} md={4}>
-              <Statistic title="\u53d8\u66f4\u6587\u4ef6" value={diffReport.report?.changedFileCount || diffReport.changedFiles.length} suffix="\u4e2a" />
+              <Statistic title="变更文件" value={diffReport.report?.changedFileCount || diffReport.changedFiles.length} suffix="个" />
             </Col>
             <Col xs={12} md={4}>
-              <Statistic title="\u9ad8\u98ce\u9669" value={diffReport.report?.highRiskCount || 0} suffix="\u9879" />
+              <Statistic title="高风险" value={diffReport.report?.highRiskCount || 0} suffix="项" />
             </Col>
             <Col xs={12} md={4}>
-              <Statistic title="\u672a\u8986\u76d6" value={diffReport.report?.notCoveredRiskCount || 0} suffix="\u9879" />
+              <Statistic title="未覆盖" value={diffReport.report?.notCoveredRiskCount || 0} suffix="项" />
             </Col>
             <Col xs={12} md={4}>
-              <Statistic title="\u51c6\u5165" value={diffReport.report?.gateStatus || diffReport.task.mergeGateStatus || "-"} />
+              <Statistic title="准入" value={diffReport.report?.gateStatus || diffReport.task.mergeGateStatus || "-"} />
             </Col>
           </Row>
         </Card>
@@ -1508,7 +1508,7 @@ function App() {
           </Card>
         ) : null}
 
-        <Card className="panel-card" title="\u53d8\u66f4\u6587\u4ef6">
+        <Card className="panel-card" title="变更文件">
           <Table<DiffChangedFileVO>
             rowKey="changedFileId"
             columns={changedFileColumns}
@@ -1518,7 +1518,7 @@ function App() {
           />
         </Card>
 
-        <Card className="panel-card" title="\u98ce\u9669\u4e0e\u8986\u76d6\u5206\u6790">
+        <Card className="panel-card" title="风险与覆盖分析">
           <Table<DiffRiskItemVO>
             rowKey="riskId"
             columns={riskColumns}
@@ -1531,7 +1531,7 @@ function App() {
                   <List
                     size="small"
                     dataSource={record.matchedCases || []}
-                    locale={{ emptyText: "\u6682\u65e0\u5339\u914d\u7528\u4f8b" }}
+                    locale={{ emptyText: "暂无匹配用例" }}
                     renderItem={(item) => (
                       <List.Item>
                         <Space direction="vertical" size={0}>
@@ -1633,22 +1633,22 @@ function StatusTag({ value }: { value?: string }) {
     IGNORED: "default"
   };
   const labelMap: Record<string, string> = {
-    SUCCESS: "\u6210\u529f",
-    FAILED: "\u5931\u8d25",
-    PROCESSING: "\u5904\u7406\u4e2d",
-    PENDING: "\u5f85\u5904\u7406",
-    APPROVED: "\u5df2\u786e\u8ba4",
-    REJECTED: "\u5df2\u9a73\u56de",
-    RUNNING: "\u8fd0\u884c\u4e2d",
-    WAIT_CASE: "\u5f85\u8865\u7528\u4f8b",
-    WAIT_TEST: "\u5f85\u6d4b\u8bd5",
-    PASSED: "\u5df2\u901a\u8fc7",
-    BLOCKED: "\u963b\u585e",
-    CLOSED: "\u5df2\u5173\u95ed",
-    CONFIRMED: "\u5df2\u786e\u8ba4",
-    IGNORED: "\u5df2\u5ffd\u7565"
+    SUCCESS: "成功",
+    FAILED: "失败",
+    PROCESSING: "处理中",
+    PENDING: "待处理",
+    APPROVED: "已确认",
+    REJECTED: "已驳回",
+    RUNNING: "运行中",
+    WAIT_CASE: "待补用例",
+    WAIT_TEST: "待测试",
+    PASSED: "已通过",
+    BLOCKED: "阻塞",
+    CLOSED: "已关闭",
+    CONFIRMED: "已确认",
+    IGNORED: "已忽略"
   };
-  return <Tag color={value ? colorMap[value] || "default" : "default"}>{value ? labelMap[value] || value : "\u672a\u5f00\u59cb"}</Tag>;
+  return <Tag color={value ? colorMap[value] || "default" : "default"}>{value ? labelMap[value] || value : "未开始"}</Tag>;
 }
 function RiskLevelTag({ value }: { value?: string }) {
   const colorMap: Record<string, string> = {
@@ -1670,10 +1670,10 @@ function CoverageTag({ value }: { value?: string }) {
     NEED_CONFIRM: "blue"
   };
   const labelMap: Record<string, string> = {
-    COVERED: "\u5df2\u8986\u76d6",
-    PARTIAL_COVERED: "\u90e8\u5206\u8986\u76d6",
-    NOT_COVERED: "\u672a\u8986\u76d6",
-    NEED_CONFIRM: "\u5f85\u786e\u8ba4"
+    COVERED: "已覆盖",
+    PARTIAL_COVERED: "部分覆盖",
+    NOT_COVERED: "未覆盖",
+    NEED_CONFIRM: "待确认"
   };
   return <Tag color={value ? colorMap[value] || "default" : "default"}>{value ? labelMap[value] || value : "-"}</Tag>;
 }
@@ -1685,10 +1685,10 @@ function GateTag({ value }: { value?: string }) {
     MANUAL_REVIEW: "blue"
   };
   const labelMap: Record<string, string> = {
-    PASS: "\u901a\u8fc7",
-    WARNING: "\u8b66\u544a",
-    BLOCK: "\u963b\u585e",
-    MANUAL_REVIEW: "\u4eba\u5de5\u590d\u6838"
+    PASS: "通过",
+    WARNING: "警告",
+    BLOCK: "阻塞",
+    MANUAL_REVIEW: "人工复核"
   };
   return <Tag color={value ? colorMap[value] || "default" : "default"}>{value ? labelMap[value] || value : "-"}</Tag>;
 }
