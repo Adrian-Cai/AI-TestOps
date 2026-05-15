@@ -49,6 +49,7 @@ public class DiffReportRefreshServiceImpl implements DiffReportRefreshService {
         DiffMergeGateStatusEnum gate = gateCalculator.calculate(risks);
         AiTestopsDiffMergeGateReport report = reportService.getOne(new LambdaQueryWrapper<AiTestopsDiffMergeGateReport>()
                 .eq(AiTestopsDiffMergeGateReport::getTaskId, taskId)
+                .orderByDesc(AiTestopsDiffMergeGateReport::getId)
                 .last("limit 1"), false);
         if (report == null) {
             report = new AiTestopsDiffMergeGateReport();

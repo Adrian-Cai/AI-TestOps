@@ -71,7 +71,7 @@ public class DiffCoverageMatcher {
         if (bestScore.compareTo(PARTIAL_THRESHOLD) >= 0) {
             return new CoverageMatchResult(DiffCoverageStatusEnum.PARTIAL_COVERED.name(), "已有用例覆盖部分风险关键词，仍需补充缺失场景", relations);
         }
-        return new CoverageMatchResult(DiffCoverageStatusEnum.PARTIAL_COVERED.name(),
+        return new CoverageMatchResult(DiffCoverageStatusEnum.NEED_CONFIRM.name(),
                 "未找到明显关键词匹配，已关联同一需求来源的正式测试用例，请人工确认覆盖范围",
                 buildFallbackRelations(risk, cases));
     }

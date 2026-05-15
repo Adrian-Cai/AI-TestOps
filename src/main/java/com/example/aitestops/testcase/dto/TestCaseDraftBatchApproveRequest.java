@@ -14,7 +14,7 @@ import java.util.List;
 public class TestCaseDraftBatchApproveRequest {
 
     @NotEmpty(message = "草稿ID列表不能为空")
-    private List<String> draftCaseIds;
+    private List<@NotBlank(message = "草稿ID不能为空") String> draftCaseIds;
 
     @NotBlank(message = "评审人不能为空")
     @Size(max = 64, message = "评审人不能超过64个字符")

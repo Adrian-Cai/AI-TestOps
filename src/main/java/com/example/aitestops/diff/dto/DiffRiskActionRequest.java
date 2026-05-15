@@ -1,5 +1,6 @@
 package com.example.aitestops.diff.dto;
 
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -26,4 +27,14 @@ public class DiffRiskActionRequest {
     private String ignoreReason;
 
     private List<Long> relatedCaseIds;
+
+    @AssertTrue(message = "IGNORE 动作必须填写忽略原因")
+    public boolean isIgnoreReasonValid() {
+        return !"IGNORE".equals(actionType) || (ignoreReason != null && !ignoreReason.isBlank());
+    }
+
+    @AssertTrue(message = "LINK_CASE 动作必须提供关联用例")
+    public boolean isRelatedCasesValid() {
+        return !"LINK_CASE".equals(actionType) || (relatedCaseIds != null && !relatedCaseIds.isEmpty());
+    }
 }

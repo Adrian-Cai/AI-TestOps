@@ -131,8 +131,11 @@ class AiTestopsDiffAnalysisServiceIntegrationTest {
         assertThat(report.getRiskList().get(0).getMatchedCases())
                 .extracting("caseDbId")
                 .contains(testCase.getId());
-        assertThat(report.getRiskList().get(0).getMatchedCases().get(0).getJudgementReason())
-                .contains("同一需求");
+        var matched = report.getRiskList().get(0).getMatchedCases().stream()
+                .filter(c -> java.util.Objects.equals(c.getCaseDbId(), testCase.getId()))
+                .findFirst();
+        assertThat(matched).isPresent();
+        assertThat(matched.get().getJudgementReason()).contains("同一需求");
     }
 
     @Test

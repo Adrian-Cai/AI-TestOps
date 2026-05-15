@@ -66,12 +66,6 @@ public class DiffSupplementCaseLinker {
     }
 
     private void ensureRelation(AiTestopsDiffRiskItem risk, AiTestopsTestCase testCase, String operator) {
-        long existing = riskCaseRelService.count(new LambdaQueryWrapper<AiTestopsDiffRiskCaseRel>()
-                .eq(AiTestopsDiffRiskCaseRel::getRiskId, risk.getId())
-                .eq(AiTestopsDiffRiskCaseRel::getCaseId, testCase.getId()));
-        if (existing > 0) {
-            return;
-        }
         AiTestopsDiffRiskCaseRel rel = new AiTestopsDiffRiskCaseRel();
         rel.setRiskId(risk.getId());
         rel.setCaseId(testCase.getId());
@@ -85,7 +79,11 @@ public class DiffSupplementCaseLinker {
         rel.setGeneratedFromAi(0);
         rel.setCreatedBy(operator);
         rel.setCreatedAt(LocalDateTime.now());
-        riskCaseRelService.save(rel);
+        try {
+            riskCaseRelService.save(rel);
+        } catch (org.springframework.dao.DuplicateKeyException ignored) {
+            // idempotent under concurrent approvals
+        }
     }
 
     private Long resolveRiskId(AiTestopsTestCaseDraft draft) {
