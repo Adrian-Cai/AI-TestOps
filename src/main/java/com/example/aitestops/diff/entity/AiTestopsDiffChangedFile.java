@@ -7,6 +7,12 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * Diff 变更文件实体。
+ * <p>
+ * 记录代码变更文件的路径、类型、语言、代码行数统计和初始风险评估。
+ * </p>
+ */
 @Data
 @TableName("ai_testops_diff_changed_file")
 public class AiTestopsDiffChangedFile {

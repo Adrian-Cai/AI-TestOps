@@ -7,6 +7,12 @@ import lombok.Data;
 
 import java.util.List;
 
+/**
+ * 风险验证结果请求 DTO。
+ * <p>
+ * 用于标记风险项的验证结果，支持 PASS（通过）、FAIL（失败）、BLOCKED（阻塞）三种状态。
+ * </p>
+ */
 @Data
 public class DiffRiskVerifyRequest {
 

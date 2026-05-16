@@ -21,6 +21,14 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
+/**
+ * Diff 风险覆盖匹配器。
+ * <p>
+ * 基于关键词匹配算法，将风险项与已有测试用例进行相似度计算，
+ * 判断风险的覆盖状态（已覆盖、部分覆盖、需确认）。
+ * 当关键词匹配度较低时，生成回退关联建议供人工确认。
+ * </p>
+ */
 @Service
 @RequiredArgsConstructor
 public class DiffCoverageMatcher {
@@ -35,6 +43,16 @@ public class DiffCoverageMatcher {
 
     private final AiTestopsTestCaseService testCaseService;
 
+    /**
+     * 执行风险覆盖匹配。
+     * <p>
+     * 加载候选测试用例，通过关键词匹配计算相似度，
+     * 返回覆盖状态、原因和关联关系列表。
+     * </p>
+     *
+     * @param risk 风险项
+     * @return 覆盖匹配结果
+     */
     public CoverageMatchResult match(AiTestopsDiffRiskItem risk) {
         List<AiTestopsTestCase> cases = loadCandidateCases(risk);
         if (cases.isEmpty()) {
@@ -200,6 +218,13 @@ public class DiffCoverageMatcher {
         return value == null ? "" : value;
     }
 
+    /**
+     * 覆盖匹配结果记录。
+     *
+     * @param coverageStatus 覆盖状态（COVERED、PARTIAL_COVERED、NOT_COVERED、NEED_CONFIRM）
+     * @param coverageReason 覆盖原因说明
+     * @param relations      风险-用例关联关系列表
+     */
     public record CoverageMatchResult(String coverageStatus, String coverageReason, List<AiTestopsDiffRiskCaseRel> relations) {
     }
 }

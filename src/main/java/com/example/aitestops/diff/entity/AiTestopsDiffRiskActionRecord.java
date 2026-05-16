@@ -7,6 +7,12 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * Diff 风险处理记录实体。
+ * <p>
+ * 记录风险项的处理动作、状态变更和操作人信息。
+ * </p>
+ */
 @Data
 @TableName("ai_testops_diff_risk_action_record")
 public class AiTestopsDiffRiskActionRecord {

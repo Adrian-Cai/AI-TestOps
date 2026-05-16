@@ -79,6 +79,20 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * Diff 分析任务服务实现。
+ * <p>
+ * 提供代码 Diff 分析的完整业务流程，包括：
+ * <ul>
+ *   <li>从 Git 仓库获取代码变更</li>
+ *   <li>识别变更文件并分类</li>
+ *   <li>基于规则和 AI 分析风险项</li>
+ *   <li>匹配测试用例覆盖</li>
+ *   <li>生成合并准入报告</li>
+ *   <li>管理风险处理和验证流程</li>
+ * </ul>
+ * </p>
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor

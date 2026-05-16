@@ -8,6 +8,12 @@ import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+/**
+ * Diff 风险项实体。
+ * <p>
+ * 记录风险的基本信息、等级、分类、来源、影响模块、覆盖状态和处理状态。
+ * </p>
+ */
 @Data
 @TableName("ai_testops_diff_risk_item")
 public class AiTestopsDiffRiskItem {

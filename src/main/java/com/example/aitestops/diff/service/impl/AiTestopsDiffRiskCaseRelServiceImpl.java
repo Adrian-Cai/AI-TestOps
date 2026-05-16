@@ -6,6 +6,9 @@ import com.example.aitestops.diff.mapper.AiTestopsDiffRiskCaseRelMapper;
 import com.example.aitestops.diff.service.AiTestopsDiffRiskCaseRelService;
 import org.springframework.stereotype.Service;
 
+/**
+ * Diff 风险-用例关联关系服务实现。
+ */
 @Service
 public class AiTestopsDiffRiskCaseRelServiceImpl
         extends ServiceImpl<AiTestopsDiffRiskCaseRelMapper, AiTestopsDiffRiskCaseRel>

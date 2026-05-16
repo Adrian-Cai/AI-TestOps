@@ -4,6 +4,12 @@ import lombok.Data;
 
 import java.util.List;
 
+/**
+ * Diff 风险项视图对象。
+ * <p>
+ * 包含风险的基本信息、等级、分类、影响模块、覆盖状态和匹配的测试用例等。
+ * </p>
+ */
 @Data
 public class DiffRiskItemVO {
 

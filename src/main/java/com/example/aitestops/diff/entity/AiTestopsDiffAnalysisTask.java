@@ -7,6 +7,12 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * Diff 分析任务实体。
+ * <p>
+ * 记录代码 Diff 分析任务的基本信息、分支配置、执行状态和风险统计。
+ * </p>
+ */
 @Data
 @TableName("ai_testops_diff_analysis_task")
 public class AiTestopsDiffAnalysisTask {

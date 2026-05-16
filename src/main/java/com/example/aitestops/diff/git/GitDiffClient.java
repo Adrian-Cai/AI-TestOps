@@ -31,6 +31,13 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
+/**
+ * Git Diff 客户端。
+ * <p>
+ * 负责与 Git 仓库交互，获取分支列表和代码变更差异，
+ * 支持本地仓库和远程仓库（GitHub 等）。
+ * </p>
+ */
 @Slf4j
 @Component
 public class GitDiffClient {

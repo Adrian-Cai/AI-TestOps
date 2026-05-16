@@ -7,6 +7,7 @@ import com.example.aitestops.diff.enums.DiffCoverageStatusEnum;
 import com.example.aitestops.diff.enums.DiffMergeGateStatusEnum;
 import com.example.aitestops.diff.enums.DiffRiskLevelEnum;
 import com.example.aitestops.diff.enums.DiffRiskProcessStatusEnum;
+import com.example.aitestops.diff.gate.DiffMergeGateResolver;
 import com.example.aitestops.diff.service.AiTestopsDiffRiskCaseRelService;
 import com.example.aitestops.diff.service.AiTestopsDiffRiskItemService;
 import com.example.aitestops.diff.service.DiffReportRefreshService;
@@ -23,6 +24,13 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Set;
 
+/**
+ * Diff 补充用例关联服务。
+ * <p>
+ * 当补充用例草稿被审批通过后，负责将正式测试用例关联到对应的风险项，
+ * 更新风险的覆盖状态、处理状态和准入影响，并触发报告刷新。
+ * </p>
+ */
 @Service
 @RequiredArgsConstructor
 public class DiffSupplementCaseLinker {
@@ -42,6 +50,18 @@ public class DiffSupplementCaseLinker {
     private final DiffReportRefreshService reportRefreshService;
     private final ObjectMapper objectMapper;
 
+    /**
+     * 关联已审批通过的补充用例到风险项。
+     * <p>
+     * 从草稿元数据中解析目标风险 ID，确保风险-用例关联关系存在，
+     * 更新风险的覆盖状态、处理状态和准入影响，并触发报告刷新。
+     * 操作具有幂等性，并发审批场景下不会产生重复关联。
+     * </p>
+     *
+     * @param draft    补充用例草稿
+     * @param testCase 正式测试用例
+     * @param operator 操作人
+     */
     @Transactional
     public void linkApprovedSupplementCase(AiTestopsTestCaseDraft draft, AiTestopsTestCase testCase, String operator) {
         Long riskId = resolveRiskId(draft);
@@ -59,9 +79,11 @@ public class DiffSupplementCaseLinker {
         if (!TERMINAL_STATUSES.contains(risk.getProcessStatus())) {
             risk.setProcessStatus(DiffRiskProcessStatusEnum.WAIT_TEST.name());
         }
-        risk.setMergeGateImpact(resolveRiskGateImpact(risk));
+        risk.setMergeGateImpact(DiffMergeGateResolver.resolveRiskGateImpact(risk));
         risk.setUpdatedAt(LocalDateTime.now());
-        riskItemService.updateById(risk);
+        if (!riskItemService.updateById(risk)) {
+            return;
+        }
         reportRefreshService.refresh(risk.getTaskId());
     }
 
@@ -134,17 +156,4 @@ public class DiffSupplementCaseLinker {
         }
     }
 
-    private String resolveRiskGateImpact(AiTestopsDiffRiskItem risk) {
-        if (DiffRiskLevelEnum.HIGH.name().equals(risk.getRiskLevel())
-                && DiffCoverageStatusEnum.NOT_COVERED.name().equals(risk.getCoverageStatus())) {
-            return DiffMergeGateStatusEnum.BLOCK.name();
-        }
-        if (DiffCoverageStatusEnum.NEED_CONFIRM.name().equals(risk.getCoverageStatus())) {
-            return DiffMergeGateStatusEnum.MANUAL_REVIEW.name();
-        }
-        if (DiffCoverageStatusEnum.PARTIAL_COVERED.name().equals(risk.getCoverageStatus())) {
-            return DiffMergeGateStatusEnum.WARNING.name();
-        }
-        return DiffMergeGateStatusEnum.PASS.name();
-    }
 }

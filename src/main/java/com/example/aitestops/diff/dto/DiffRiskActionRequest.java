@@ -8,6 +8,13 @@ import lombok.Data;
 
 import java.util.List;
 
+/**
+ * 风险处理动作请求 DTO。
+ * <p>
+ * 支持的动作类型：CONFIRM（确认）、IGNORE（忽略）、LINK_CASE（关联用例）、
+ * MARK_PASS（标记通过）、MARK_FAIL（标记失败）、MARK_BLOCKED（标记阻塞）、CLOSE（关闭）。
+ * </p>
+ */
 @Data
 public class DiffRiskActionRequest {
 

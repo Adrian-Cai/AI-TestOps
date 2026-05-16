@@ -6,6 +6,9 @@ import com.example.aitestops.diff.mapper.AiTestopsDiffChangedFileMapper;
 import com.example.aitestops.diff.service.AiTestopsDiffChangedFileService;
 import org.springframework.stereotype.Service;
 
+/**
+ * Diff 变更文件服务实现。
+ */
 @Service
 public class AiTestopsDiffChangedFileServiceImpl
         extends ServiceImpl<AiTestopsDiffChangedFileMapper, AiTestopsDiffChangedFile>

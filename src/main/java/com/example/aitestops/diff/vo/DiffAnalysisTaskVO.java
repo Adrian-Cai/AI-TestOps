@@ -4,6 +4,12 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * Diff 分析任务视图对象。
+ * <p>
+ * 包含任务基本信息、分支配置、状态、风险统计和合并准入状态等。
+ * </p>
+ */
 @Data
 public class DiffAnalysisTaskVO {
 

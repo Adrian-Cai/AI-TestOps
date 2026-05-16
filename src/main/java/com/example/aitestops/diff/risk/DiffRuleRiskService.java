@@ -21,6 +21,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+/**
+ * Diff 规则风险识别服务。
+ * <p>
+ * 基于文件角色和变更类型，通过规则匹配识别风险项，
+ * 并构建风险实体列表用于后续处理。
+ * </p>
+ */
 @Service
 @RequiredArgsConstructor
 public class DiffRuleRiskService {

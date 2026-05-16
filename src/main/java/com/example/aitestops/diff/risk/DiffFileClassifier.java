@@ -6,6 +6,13 @@ import org.springframework.util.StringUtils;
 
 import java.util.Locale;
 
+/**
+ * Diff 文件分类器。
+ * <p>
+ * 根据文件路径和名称识别文件在系统中的角色类型，
+ * 如控制器、服务层、数据访问层、配置文件等。
+ * </p>
+ */
 @Component
 public class DiffFileClassifier {
 

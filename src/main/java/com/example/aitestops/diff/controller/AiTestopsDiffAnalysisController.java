@@ -23,6 +23,13 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+/**
+ * Diff 分析 REST API 控制器。
+ * <p>
+ * 提供代码 Diff 分析任务的创建、查询、报告获取、风险处理、
+ * 验证标记和补充用例生成等接口。
+ * </p>
+ */
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/ai-testops/diff-analysis")

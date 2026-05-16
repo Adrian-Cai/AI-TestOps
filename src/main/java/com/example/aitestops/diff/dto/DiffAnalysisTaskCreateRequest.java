@@ -5,6 +5,13 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+/**
+ * Diff 分析任务创建请求 DTO。
+ * <p>
+ * 包含仓库地址、源分支、目标分支等必要信息，
+ * 以及可选的需求文档 ID 和分析选项配置。
+ * </p>
+ */
 @Data
 public class DiffAnalysisTaskCreateRequest {
 

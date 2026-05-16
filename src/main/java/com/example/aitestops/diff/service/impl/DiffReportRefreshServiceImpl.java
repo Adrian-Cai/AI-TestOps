@@ -28,6 +28,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+/**
+ * Diff 分析报告刷新服务实现。
+ * <p>
+ * 加载指定任务的风险项和变更文件，通过 {@link DiffMergeGateCalculator} 计算合并准入状态，
+ * 创建或更新 {@link AiTestopsDiffMergeGateReport} 报告记录，并同步更新分析任务的汇总字段。
+ * </p>
+ */
 @Service
 @RequiredArgsConstructor
 public class DiffReportRefreshServiceImpl implements DiffReportRefreshService {

@@ -4,6 +4,12 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * Diff 合并准入报告视图对象。
+ * <p>
+ * 包含报告基本信息、准入状态、风险统计、覆盖统计和回归建议等。
+ * </p>
+ */
 @Data
 public class DiffMergeGateReportVO {
 

@@ -7,6 +7,12 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * Diff 合并准入报告实体。
+ * <p>
+ * 记录合并准入门禁的状态、风险统计、覆盖统计和回归建议。
+ * </p>
+ */
 @Data
 @TableName("ai_testops_diff_merge_gate_report")
 public class AiTestopsDiffMergeGateReport {
