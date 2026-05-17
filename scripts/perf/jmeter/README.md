@@ -1,128 +1,144 @@
-# JMeter 压测使用指南
+# AI-TestOps JMeter 压测使用指南
+
+本目录用于压测 AI-TestOps 主流程中不依赖大模型的部分：
+
+```text
+文件上传 -> 文档解析 -> 人工确认草稿 -> 保存正式用例 -> JSON/Excel 导出
+```
+
+`提取结构化需求` 和 `生成测试用例草稿` 依赖大模型，不纳入本 JMeter 压测计时。确认与导出场景需要提前准备草稿数据。
 
 ## 目录结构
 
-```
+```text
 jmeter/
-├── ai-testops-main-flow.jmx    # JMeter测试计划
-├── 压测接口文档.md              # 接口详细文档
-├── README.md                    # 本文件
-└── data/
-    ├── upload-iterations.csv    # 上传流程测试数据
-    └── draft-groups.csv         # 审批流程测试数据
+├── ai-testops-main-flow.jmx       # 主流程 JMeter 测试计划
+├── 压测接口文档.md                 # 接口、造数、指标与计划
+├── README.md
+├── data/
+│   ├── upload-iterations.csv
+│   └── draft-groups.csv
+└── results/
 ```
 
-## 快速开始
+## 运行方式
 
-### 1. 环境准备
+正式压测请使用 JMeter 非 GUI 模式。JMeter 官方推荐使用 `-n -t ... -l ... -e -o ...` 运行并生成 HTML 报告。
 
-- 安装 JMeter 5.6+
-- 确保服务已启动: `http://localhost:8080`
+如果 `jmeter` 命令不在 PATH，请改用完整路径，例如：
 
-### 2. 准备测试数据
-
-**上传文件：**
-将测试文件复制到 JMeter 的 `bin` 目录或修改 `UPLOAD_FILE` 变量路径：
-
-```bash
-# 从项目根目录复制测试文件
-cp scripts/perf/fixtures/需求文档01_智能订单履约与售后协同系统.md apache-jmeter-5.6/bin/
+```powershell
+& 'D:\tools\apache-jmeter-5.6.3\bin\jmeter.bat' -n -t ai-testops-main-flow.jmx
 ```
 
-**CSV 数据文件：**
-`data/` 目录下已有示例数据，根据实际情况修改。
+先进入 JMeter 文件目录：
 
-### 3. 运行压测
-
-**GUI 模式（调试用）：**
-```bash
-jmeter
-# 打开 ai-testops-main-flow.jmx
+```powershell
+cd D:\AllProject\AI-TestOps\scripts\perf\jmeter
 ```
 
-**命令行模式（正式压测）：**
-```bash
-jmeter -n -t ai-testops-main-flow.jmx -l results/test-result.jtl -e -o results/report
+### 1. Smoke：上传 + 解析
+
+```powershell
+jmeter -n `
+  -t ai-testops-main-flow.jmx `
+  -Jtarget.protocol=https `
+  -Jtarget.host=ai-case.wiac.xyz `
+  -Jflow=upload_parse `
+  -Jthreads=1 `
+  -Jramp.seconds=5 `
+  -Jduration.seconds=30 `
+  -Jthink.time.ms=1000 `
+  -l results/upload-parse-smoke.jtl `
+  -e -o results/upload-parse-smoke-report
 ```
 
-### 4. 查看结果
+### 2. 基线：上传 + 解析
 
-```bash
-# 生成HTML报告
-jmeter -g results/test-result.jtl -o results/html-report
-
-# 打开报告
-start results/html-report/index.html
+```powershell
+jmeter -n `
+  -t ai-testops-main-flow.jmx `
+  -Jtarget.protocol=https `
+  -Jtarget.host=ai-case.wiac.xyz `
+  -Jflow=upload_parse `
+  -Jthreads=2 `
+  -Jramp.seconds=30 `
+  -Jduration.seconds=300 `
+  -Jthink.time.ms=1000 `
+  -l results/upload-parse-baseline.jtl `
+  -e -o results/upload-parse-baseline-report
 ```
 
-## 配置说明
+### 3. 批量确认 + 导出
 
-### 线程组参数
+先把 `data/draft-groups.csv` 替换为真实待确认草稿数据，不能重复消费同一批 `draftCaseIds`。
+
+```powershell
+jmeter -n `
+  -t ai-testops-main-flow.jmx `
+  -Jtarget.protocol=https `
+  -Jtarget.host=ai-case.wiac.xyz `
+  -Jflow=approve_export `
+  -Jthreads=3 `
+  -Jramp.seconds=30 `
+  -Jduration.seconds=300 `
+  -Jexport.json=true `
+  -Jexport.excel=true `
+  -l results/approve-export-baseline.jtl `
+  -e -o results/approve-export-baseline-report
+```
+
+只测 JSON 导出：
+
+```powershell
+jmeter -n `
+  -t ai-testops-main-flow.jmx `
+  -Jtarget.protocol=https `
+  -Jtarget.host=ai-case.wiac.xyz `
+  -Jflow=approve_export `
+  -Jthreads=5 `
+  -Jduration.seconds=300 `
+  -Jexport.json=true `
+  -Jexport.excel=false `
+  -l results/approve-json.jtl `
+  -e -o results/approve-json-report
+```
+
+## 常用参数
 
 | 参数 | 默认值 | 说明 |
-|------|--------|------|
-| 线程数 | 10 | 并发用户数 |
-| Ramp-Up | 5秒 | 启动时间 |
-| 持续时间 | 300秒 | 压测时长 |
-| 循环次数 | -1 | 无限循环 |
+| --- | --- | --- |
+| `target.protocol` | `https` | 目标协议 |
+| `target.host` | `ai-case.wiac.xyz` | 目标域名，不要带 `https://` |
+| `target.port` | 空 | 目标端口，HTTPS 默认 443 可留空 |
+| `flow` | `upload_parse` | `upload_parse` 或 `approve_export` |
+| `threads` | `2` | 并发线程数 |
+| `ramp.seconds` | `10` | 线程启动爬坡时间 |
+| `duration.seconds` | `60` | 压测持续时间 |
+| `think.time.ms` | `1000` | 每轮业务流程后的等待时间 |
+| `upload.file` | `../fixtures/需求文档01_智能订单履约与售后协同系统.md` | 上传文件路径 |
+| `export.json` | `true` | 是否导出 JSON |
+| `export.excel` | `true` | 是否导出 Excel |
 
-### 用户定义变量
+## 结果查看
 
-| 变量名 | 默认值 | 说明 |
-|--------|--------|------|
-| BASE_URL | http://localhost:8080 | 服务地址 |
-| THINK_TIME | 1000 | 思考时间(ms) |
-| UPLOAD_FILE | ./fixtures/需求文档01.md | 上传文件路径 |
+HTML 报告生成后打开：
 
-## 压测场景
-
-### 场景一: 上传解析流程
-
-1. 上传文档 → 获取 documentId
-2. 使用 documentId 解析文档
-3. 思考时间 1秒
-
-### 场景二: 审批导出流程
-
-1. 批量审批草稿用例
-2. 导出JSON格式
-3. 导出Excel格式
-4. 思考时间 1秒
-
-> 注意: 两个场景默认互斥，运行时启用其中一个
-
-## 性能指标
-
-| 指标 | 阈值 |
-|------|------|
-| 请求失败率 | < 1% |
-| 响应时间 P95 | < 2500ms |
-| 响应时间 P99 | < 5000ms |
-| 业务成功率 | > 99% |
-
-## 常见问题
-
-### Q: 如何调整压测强度？
-
-修改线程组的 `ThreadGroup.num_threads` 值：
-- 低负载: 5-10 线程
-- 中负载: 20-50 线程
-- 高负载: 100+ 线程
-
-### Q: 如何只运行某个场景？
-
-在 JMeter GUI 中：
-1. 右键点击要禁用的线程组
-2. 选择 "禁用"
-
-或在命令行使用 `-J` 参数：
-```bash
-jmeter -n -t ai-testops-main-flow.jmx -Jthreads=20 -Jduration=600
+```powershell
+start results/upload-parse-baseline-report/index.html
 ```
 
-### Q: 如何查看实时结果？
+重点看：
 
-添加监听器：
-- 聚合报告 (Aggregate Report)
-- 响应时间图 (Response Time Graph)
-- 活跃线程数 (Active Threads Over Time)
+- `Throughput`：吞吐量，近似 QPS/TPS。
+- `Average`：平均响应时间。
+- `90% Line / 95% Line / 99% Line`：分位响应时间。
+- `Error %`：错误率。
+- 每个 sampler 和 `TX-*` Transaction Controller 的耗时。
+
+## 注意事项
+
+- `approve_export` 必须使用真实 `PENDING` 草稿数据；示例 CSV 只展示格式。
+- `data/draft-groups.csv` 的 `draftCaseIds` 是 JSON 数组字符串，CSV 已开启 quoted data。
+- Excel 导出会消耗更多 CPU 和内存，也更容易受 6 Mbps 公网带宽限制。
+- 正式压测不要打开 GUI 监听器；GUI 只用于调试测试计划。
