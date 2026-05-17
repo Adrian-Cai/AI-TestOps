@@ -12,6 +12,7 @@ import com.example.aitestops.testcase.vo.TestCaseGenerateVO;
 import com.example.aitestops.testcase.vo.TestCaseVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -38,7 +39,7 @@ public class AiTestopsTestCaseController {
 
     @PostMapping("/generate")
     @Operation(summary = "基于 documentId 或 requirementExtractId 生成测试用例草稿")
-    public ApiResponse<TestCaseGenerateVO> generateDrafts(@RequestBody TestCaseGenerateRequest request) {
+    public ApiResponse<TestCaseGenerateVO> generateDrafts(@Valid @RequestBody TestCaseGenerateRequest request) {
         return ApiResponse.success(draftService.generateDrafts(request));
     }
 
@@ -58,27 +59,27 @@ public class AiTestopsTestCaseController {
     @PutMapping("/drafts/{draftCaseId}")
     @Operation(summary = "人工编辑测试用例草稿")
     public ApiResponse<TestCaseDraftVO> updateDraft(@PathVariable String draftCaseId,
-                                                    @RequestBody TestCaseDraftUpdateRequest request) {
+                                                    @Valid @RequestBody TestCaseDraftUpdateRequest request) {
         return ApiResponse.success(draftService.updateDraft(draftCaseId, request));
     }
 
     @PostMapping("/drafts/{draftCaseId}/approve")
     @Operation(summary = "确认单条草稿并写入正式测试用例")
     public ApiResponse<TestCaseVO> approveDraft(@PathVariable String draftCaseId,
-                                                @RequestBody(required = false) TestCaseDraftReviewRequest request) {
+                                                @Valid @RequestBody(required = false) TestCaseDraftReviewRequest request) {
         return ApiResponse.success(draftService.approveDraft(draftCaseId, request));
     }
 
     @PostMapping("/drafts/{draftCaseId}/reject")
     @Operation(summary = "驳回单条草稿并记录评审原因")
     public ApiResponse<TestCaseDraftVO> rejectDraft(@PathVariable String draftCaseId,
-                                                    @RequestBody(required = false) TestCaseDraftReviewRequest request) {
+                                                    @Valid @RequestBody(required = false) TestCaseDraftReviewRequest request) {
         return ApiResponse.success(draftService.rejectDraft(draftCaseId, request));
     }
 
     @PostMapping("/drafts/batch-approve")
     @Operation(summary = "批量确认测试用例草稿")
-    public ApiResponse<List<TestCaseVO>> batchApprove(@RequestBody TestCaseDraftBatchApproveRequest request) {
+    public ApiResponse<List<TestCaseVO>> batchApprove(@Valid @RequestBody TestCaseDraftBatchApproveRequest request) {
         return ApiResponse.success(draftService.batchApprove(request));
     }
 
