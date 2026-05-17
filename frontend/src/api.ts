@@ -3,10 +3,6 @@ import type {
   DocumentChunkVO,
   DocumentParseSummaryVO,
   DocumentVO,
-  DiffAnalysisReportVO,
-  DiffAnalysisSourceVO,
-  DiffAnalysisTaskVO,
-  DiffSupplementCaseVO,
   GenerationRecordVO,
   RequirementExtractVO,
   TestCaseDraftVO,
@@ -128,55 +124,5 @@ export const api = {
     const query = new URLSearchParams();
     if (documentId) query.set("documentId", documentId);
     return `/api/ai-testops/export/testcases/excel${query.toString() ? `?${query}` : ""}`;
-  },
-  createDiffTask(input: {
-    documentId?: string;
-    requirementExtractId?: string;
-    repoUrl: string;
-    sourceBranch: string;
-    targetBranch?: string;
-    analysisOptions?: {
-      includeTestFiles?: boolean;
-      enableAiAnalysis?: boolean;
-      enableCoverageCheck?: boolean;
-      autoGenerateSupplementCases?: boolean;
-    };
-  }) {
-    return requestJson<DiffAnalysisTaskVO>("/api/ai-testops/diff-analysis/tasks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input)
-    });
-  },
-  listDiffTasks(input: { documentId?: string; requirementExtractId?: string; status?: string }) {
-    const query = new URLSearchParams();
-    if (input.documentId) query.set("documentId", input.documentId);
-    if (input.requirementExtractId) query.set("requirementExtractId", input.requirementExtractId);
-    if (input.status) query.set("status", input.status);
-    const suffix = query.toString() ? `?${query}` : "";
-    return requestJson<DiffAnalysisTaskVO[]>(`/api/ai-testops/diff-analysis/tasks${suffix}`);
-  },
-  listDiffSources(limit = 10) {
-    return requestJson<DiffAnalysisSourceVO[]>(`/api/ai-testops/diff-analysis/sources/recent?limit=${encodeURIComponent(String(limit))}`);
-  },
-  listRepositoryBranches(repoUrl: string) {
-    const query = new URLSearchParams({ repoUrl });
-    return requestJson<string[]>(`/api/ai-testops/diff-analysis/repositories/branches?${query}`);
-  },
-  getDiffReport(taskId: number) {
-    return requestJson<DiffAnalysisReportVO>(`/api/ai-testops/diff-analysis/tasks/${encodeURIComponent(String(taskId))}/report`);
-  },
-  applyDiffRiskAction(riskId: number, input: { actionType: string; actionDesc?: string; operator?: string; ignoreReason?: string }) {
-    return requestJson<void>(`/api/ai-testops/diff-analysis/risks/${encodeURIComponent(String(riskId))}/actions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input)
-    });
-  },
-  generateDiffSupplementCases(riskId: number) {
-    return requestJson<DiffSupplementCaseVO>(
-      `/api/ai-testops/diff-analysis/risks/${encodeURIComponent(String(riskId))}/generate-supplement-cases`,
-      { method: "POST" }
-    );
   }
 };

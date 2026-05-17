@@ -1,6 +1,5 @@
 import {
   Alert,
-  AutoComplete,
   Badge,
   Button,
   Card,
@@ -64,12 +63,15 @@ import type {
   DocumentChunkVO,
   DocumentParseSummaryVO,
   DocumentVO,
+<<<<<<< HEAD
   DiffAnalysisReportVO,
   DiffAnalysisSourceVO,
   DiffSupplementCaseVO,
   DiffAnalysisTaskVO,
   DiffChangedFileVO,
   DiffRiskItemVO,
+=======
+>>>>>>> origin/master
   GenerationRecordVO,
   OperationLog,
   RequirementExtractVO,
@@ -95,7 +97,11 @@ const exampleRequirement = `用户可以提交订单。
 4. 同一订单号不能重复提交。
 5. 订单提交成功后状态变为待支付。`;
 
+<<<<<<< HEAD
 type StepKey = "input" | "parse" | "generate" | "review" | "export" | "diff" | "diff-detail";
+=======
+type StepKey = "input" | "parse" | "generate" | "review" | "export";
+>>>>>>> origin/master
 type StepStatus = "wait" | "process" | "finish" | "error";
 
 const stepKeys: StepKey[] = ["input", "parse", "generate", "review", "export"];
@@ -106,6 +112,7 @@ const menuItems: MenuProps["items"] = [
   { key: "parse", icon: <FileSearchOutlined />, label: "文档解析" },
   { key: "generate", icon: <RobotOutlined />, label: "AI 生成" },
   { key: "review", icon: <EditOutlined />, label: "人工确认" },
+<<<<<<< HEAD
   { key: "export", icon: <DownloadOutlined />, label: "保存导出" },
   {
     key: "diff-menu",
@@ -116,6 +123,9 @@ const menuItems: MenuProps["items"] = [
       { key: "diff-detail", label: "变更文件和风险覆盖分析" }
     ]
   }
+=======
+  { key: "export", icon: <DownloadOutlined />, label: "保存导出" }
+>>>>>>> origin/master
 ];
 
 function App() {
@@ -194,6 +204,7 @@ function App() {
   const [logs, setLogs] = useState<OperationLog[]>([]);
   const [caseCount, setCaseCount] = useState(20);
   const [draftForm] = Form.useForm();
+<<<<<<< HEAD
   const [diffForm] = Form.useForm();
   const [diffTasks, setDiffTasks] = useState<DiffAnalysisTaskVO[]>([]);
   const [diffSources, setDiffSources] = useState<DiffAnalysisSourceVO[]>([]);
@@ -202,6 +213,8 @@ function App() {
   const [activeDiffFile, setActiveDiffFile] = useState<DiffChangedFileVO | null>(null);
   const [latestSupplementResult, setLatestSupplementResult] = useState<DiffSupplementCaseVO | null>(null);
   const isDiffView = diffStepKeys.includes(currentStep);
+=======
+>>>>>>> origin/master
 
   const documentId = documentInfo?.documentId;
   const generationId = generationResult?.generationId || requirementExtract?.generationId || generationRecord?.generationId;
@@ -386,6 +399,7 @@ function App() {
     if (data) setCases(data);
   };
 
+<<<<<<< HEAD
   const handleMenuClick: MenuProps["onClick"] = ({ key }) => {
     if (key === "diff-menu") {
       return;
@@ -495,6 +509,8 @@ function App() {
       messageApi.success(`已生成 ${data.generatedCases.length} 条补充用例草稿`);
     }
   };
+=======
+>>>>>>> origin/master
   const saveDraft = async () => {
     if (!editingDraft) return;
     const values = await draftForm.validateFields();
@@ -682,6 +698,7 @@ function App() {
           <div className="content-grid">
             <main className="workbench-main">
               <Card className="step-card">
+<<<<<<< HEAD
                 {isDiffView ? (
                   <Space>
                     <CodeOutlined />
@@ -695,6 +712,14 @@ function App() {
                     responsive
                   />
                 )}
+=======
+                <Steps
+                  current={stepKeys.indexOf(currentStep)}
+                  items={steps}
+                  onChange={(index) => setCurrentStep(stepKeys[index])}
+                  responsive
+                />
+>>>>>>> origin/master
               </Card>
               {renderMetricStrip()}
 
@@ -704,8 +729,11 @@ function App() {
                 {currentStep === "generate" && renderGenerateStep()}
                 {currentStep === "review" && renderReviewStep()}
                 {currentStep === "export" && renderExportStep()}
+<<<<<<< HEAD
                 {currentStep === "diff" && renderDiffStep()}
                 {currentStep === "diff-detail" && renderDiffDetailStep()}
+=======
+>>>>>>> origin/master
               </Spin>
             </main>
 
@@ -794,24 +822,6 @@ function App() {
             </Form.Item>
           </Form>
         )}
-      </Drawer>
-
-      <Drawer
-        title={activeDiffFile?.newFilePath || "Diff Patch"}
-        width={760}
-        open={Boolean(activeDiffFile)}
-        onClose={() => setActiveDiffFile(null)}
-      >
-        <Descriptions column={1} size="small" bordered>
-          <Descriptions.Item label="变更类型">{activeDiffFile?.changeType}</Descriptions.Item>
-          <Descriptions.Item label="文件角色">{activeDiffFile?.fileRole}</Descriptions.Item>
-          <Descriptions.Item label="变更行数">
-            +{activeDiffFile?.additions || 0} / -{activeDiffFile?.deletions || 0}
-          </Descriptions.Item>
-          <Descriptions.Item label="初判原因">{activeDiffFile?.initialRiskReason || "-"}</Descriptions.Item>
-        </Descriptions>
-        <Divider />
-        <pre className="json-box">{activeDiffFile?.patch || "暂无 Patch 内容"}</pre>
       </Drawer>
 
       <Drawer title={activeChunk?.chunkId} width={620} open={Boolean(activeChunk)} onClose={() => setActiveChunk(null)}>
@@ -1198,6 +1208,7 @@ function App() {
     setEditingDraft(draft);
     draftForm.setFieldsValue(draftToForm(draft));
   }
+<<<<<<< HEAD
 
   function renderDiffStep() {
     const sourceOptions = diffSources.map((source) => ({
@@ -1551,6 +1562,8 @@ function App() {
       </div>
     );
   }
+=======
+>>>>>>> origin/master
 }
 
 function validateFile(file: File) {
@@ -1622,15 +1635,7 @@ function StatusTag({ value }: { value?: string }) {
     PROCESSING: "blue",
     PENDING: "gold",
     APPROVED: "green",
-    REJECTED: "red",
-    RUNNING: "blue",
-    WAIT_CASE: "orange",
-    WAIT_TEST: "orange",
-    PASSED: "green",
-    BLOCKED: "red",
-    CLOSED: "default",
-    CONFIRMED: "blue",
-    IGNORED: "default"
+    REJECTED: "red"
   };
   const labelMap: Record<string, string> = {
     SUCCESS: "成功",
@@ -1650,6 +1655,7 @@ function StatusTag({ value }: { value?: string }) {
   };
   return <Tag color={value ? colorMap[value] || "default" : "default"}>{value ? labelMap[value] || value : "未开始"}</Tag>;
 }
+<<<<<<< HEAD
 function RiskLevelTag({ value }: { value?: string }) {
   const colorMap: Record<string, string> = {
     HIGH: "red",
@@ -1692,6 +1698,9 @@ function GateTag({ value }: { value?: string }) {
   };
   return <Tag color={value ? colorMap[value] || "default" : "default"}>{value ? labelMap[value] || value : "-"}</Tag>;
 }
+=======
+
+>>>>>>> origin/master
 function RiskTag({ value }: { value?: string }) {
   const color = value === "P0" ? "red" : value === "P1" ? "orange" : value === "P2" ? "green" : "default";
   const label = value === "P0" ? "P0" : value === "P1" ? "P1" : value === "P2" ? "P2" : (value || "-");
