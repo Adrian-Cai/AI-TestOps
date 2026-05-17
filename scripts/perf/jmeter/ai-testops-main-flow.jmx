@@ -203,6 +203,64 @@
               <hashTree/>
             </hashTree>
 
+            <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="03-get_document 查询文档详情" enabled="true">
+              <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="请求参数" enabled="true">
+                <collectionProp name="Arguments.arguments"/>
+              </elementProp>
+              <stringProp name="HTTPSampler.path">/api/ai-testops/documents/${documentId}</stringProp>
+              <stringProp name="HTTPSampler.method">GET</stringProp>
+              <stringProp name="HTTPSampler.implementation">HttpClient4</stringProp>
+            </HTTPSamplerProxy>
+            <hashTree>
+              <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Header: Accept JSON" enabled="true">
+                <collectionProp name="HeaderManager.headers">
+                  <elementProp name="" elementType="Header">
+                    <stringProp name="Header.name">Accept</stringProp>
+                    <stringProp name="Header.value">application/json</stringProp>
+                  </elementProp>
+                </collectionProp>
+              </HeaderManager>
+              <hashTree/>
+              <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="断言文档详情成功 code=0" enabled="true">
+                <collectionProp name="Asserion.test_strings">
+                  <stringProp name="0">&quot;code&quot;:0</stringProp>
+                </collectionProp>
+                <stringProp name="Assertion.custom_message">文档详情接口业务 code 不为 0</stringProp>
+                <stringProp name="Assertion.test_field">Assertion.response_data</stringProp>
+                <intProp name="Assertion.test_type">2</intProp>
+              </ResponseAssertion>
+              <hashTree/>
+            </hashTree>
+
+            <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="04-list_chunks 查询文档 chunks" enabled="true">
+              <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="请求参数" enabled="true">
+                <collectionProp name="Arguments.arguments"/>
+              </elementProp>
+              <stringProp name="HTTPSampler.path">/api/ai-testops/documents/${documentId}/chunks</stringProp>
+              <stringProp name="HTTPSampler.method">GET</stringProp>
+              <stringProp name="HTTPSampler.implementation">HttpClient4</stringProp>
+            </HTTPSamplerProxy>
+            <hashTree>
+              <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Header: Accept JSON" enabled="true">
+                <collectionProp name="HeaderManager.headers">
+                  <elementProp name="" elementType="Header">
+                    <stringProp name="Header.name">Accept</stringProp>
+                    <stringProp name="Header.value">application/json</stringProp>
+                  </elementProp>
+                </collectionProp>
+              </HeaderManager>
+              <hashTree/>
+              <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="断言 chunks 查询成功 code=0" enabled="true">
+                <collectionProp name="Asserion.test_strings">
+                  <stringProp name="0">&quot;code&quot;:0</stringProp>
+                </collectionProp>
+                <stringProp name="Assertion.custom_message">chunks 查询接口业务 code 不为 0</stringProp>
+                <stringProp name="Assertion.test_field">Assertion.response_data</stringProp>
+                <intProp name="Assertion.test_type">2</intProp>
+              </ResponseAssertion>
+              <hashTree/>
+            </hashTree>
+
             <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="思考时间" enabled="true">
               <stringProp name="ConstantTimer.delay">${THINK_TIME_MS}</stringProp>
             </ConstantTimer>
