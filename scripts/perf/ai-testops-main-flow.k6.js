@@ -12,8 +12,8 @@ const PRE_ALLOCATED_VUS = Number(__ENV.PREALLOCATED_VUS || Math.max(10, RATE * 4
 const MAX_VUS = Number(__ENV.MAX_VUS || Math.max(30, RATE * 8));
 const THINK_TIME_SECONDS = Number(__ENV.THINK_TIME_SECONDS || '1');
 
-const uploadFilePath = __ENV.UPLOAD_FILE || './fixtures/upload-sample.md';
-const uploadFileName = __ENV.UPLOAD_FILE_NAME || 'upload-sample.md';
+const uploadFilePath = __ENV.UPLOAD_FILE || './fixtures/需求文档01_智能订单履约与售后协同系统.md';
+const uploadFileName = __ENV.UPLOAD_FILE_NAME || '需求文档01_智能订单履约与售后协同系统.md';
 const uploadFile = open(uploadFilePath, 'b');
 
 const draftGroupsPath = __ENV.DRAFT_GROUPS || './draft-groups.example.json';
