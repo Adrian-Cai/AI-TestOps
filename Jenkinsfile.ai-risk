@@ -52,6 +52,16 @@ pipeline {
             defaultValue: '',
             description: '构建完成后通知邮箱；留空则不发送邮件'
         )
+        string(
+            name: 'JDK_TOOL_NAME',
+            defaultValue: '',
+            description: '可选：Jenkins 全局工具配置里的 JDK17 名称，例如 jdk17；留空则自动探测或使用当前 JAVA_HOME'
+        )
+        string(
+            name: 'JDK17_HOME',
+            defaultValue: '',
+            description: '可选：JDK17 安装目录，例如 /usr/lib/jvm/java-17-openjdk-amd64'
+        )
     }
 
     environment {
@@ -60,10 +70,12 @@ pipeline {
         JUNIT_REPORT = 'target/surefire-reports/*.xml'
         JACOCO_XML = 'target/site/jacoco/jacoco.xml'
         AI_REPORT = 'ai-risk-report.md'
+        UNIT_TEST_OK = 'false'
     }
 
     options {
         timestamps()
+        skipDefaultCheckout(true)
         disableConcurrentBuilds()
         timeout(time: 30, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '20', artifactNumToKeepStr: '20'))
@@ -79,6 +91,35 @@ pipeline {
         stage('Prepare Tools') {
             steps {
                 script {
+                    def jdkToolName = params.JDK_TOOL_NAME?.trim()
+                    def jdk17Home = params.JDK17_HOME?.trim()
+
+                    if (jdkToolName) {
+                        env.JAVA_HOME = tool name: jdkToolName, type: 'hudson.model.JDK'
+                    } else if (jdk17Home) {
+                        env.JAVA_HOME = jdk17Home
+                    } else {
+                        def detectedJdk17 = sh(
+                            script: '''
+                                for dir in /usr/lib/jvm/java-17* /usr/lib/jvm/jdk-17* /usr/lib/jvm/temurin-17* /opt/java/openjdk /opt/jdk-17*; do
+                                    if [ -x "$dir/bin/javac" ]; then
+                                        echo "$dir"
+                                        exit 0
+                                    fi
+                                done
+                                exit 0
+                            ''',
+                            returnStdout: true
+                        ).trim()
+                        if (detectedJdk17) {
+                            env.JAVA_HOME = detectedJdk17
+                        }
+                    }
+
+                    if (env.JAVA_HOME?.trim()) {
+                        env.PATH = "${env.JAVA_HOME}/bin:${env.PATH}"
+                    }
+
                     env.MVN_CMD = sh(
                         script: '''
                             if command -v mvn >/dev/null 2>&1; then
@@ -107,32 +148,51 @@ pipeline {
 
                     echo "Maven command: ${env.MVN_CMD}"
                     echo "Python command: ${env.PYTHON_CMD}"
+
+                    sh '''
+                        set -eu
+                        echo "JAVA_HOME=${JAVA_HOME:-}"
+                        java -version
+                        javac -version
+                        JAVA_MAJOR=$(javac -version 2>&1 | awk '{print $2}' | cut -d. -f1)
+                        if [ "$JAVA_MAJOR" -lt 17 ]; then
+                            echo "[ERROR] This project requires JDK 17, but current javac is: $(javac -version 2>&1)"
+                            echo "[ERROR] Install JDK 17 on the Jenkins node, or set JDK_TOOL_NAME/JDK17_HOME for this job."
+                            exit 1
+                        fi
+                        ${MVN_CMD} -version
+                    '''
                 }
             }
         }
 
         stage('Prepare Diff') {
             steps {
-                sh '''
-                    set -eu
+                script {
+                    def baseBranch = params.BASE_BRANCH?.trim() ?: 'master'
+                    withEnv(["BASE_BRANCH=${baseBranch}"]) {
+                        sh '''
+                            set -eu
 
-                    echo "Generate git diff against origin/${BASE_BRANCH} ..."
-                    git fetch origin "${BASE_BRANCH}" --depth=200 || true
+                            echo "Generate git diff against origin/${BASE_BRANCH} ..."
+                            git fetch origin "${BASE_BRANCH}" --depth=200 || true
 
-                    if git rev-parse --verify "origin/${BASE_BRANCH}" >/dev/null 2>&1; then
-                        git diff "origin/${BASE_BRANCH}...HEAD" --stat > diff-stat.txt || true
-                        git diff "origin/${BASE_BRANCH}...HEAD" > diff-full.patch || true
-                    elif git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
-                        git diff HEAD~1...HEAD --stat > diff-stat.txt || true
-                        git diff HEAD~1...HEAD > diff-full.patch || true
-                    else
-                        : > diff-stat.txt
-                        : > diff-full.patch
-                    fi
+                            if git rev-parse --verify "origin/${BASE_BRANCH}" >/dev/null 2>&1; then
+                                git diff "origin/${BASE_BRANCH}...HEAD" --stat > diff-stat.txt || true
+                                git diff "origin/${BASE_BRANCH}...HEAD" > diff-full.patch || true
+                            elif git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
+                                git diff HEAD~1...HEAD --stat > diff-stat.txt || true
+                                git diff HEAD~1...HEAD > diff-full.patch || true
+                            else
+                                : > diff-stat.txt
+                                : > diff-full.patch
+                            fi
 
-                    echo "Diff stat:"
-                    cat diff-stat.txt || true
-                '''
+                            echo "Diff stat:"
+                            cat diff-stat.txt || true
+                        '''
+                    }
+                }
             }
         }
 
@@ -140,29 +200,43 @@ pipeline {
             steps {
                 catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
                     sh '${MVN_CMD} -B clean test'
+                    script {
+                        env.UNIT_TEST_OK = 'true'
+                    }
                 }
             }
             post {
                 always {
                     junit allowEmptyResults: true, testResults: "${JUNIT_REPORT}"
-                    publishHTML(target: [
-                        allowMissing: true,
-                        alwaysLinkToLastBuild: true,
-                        keepAll: true,
-                        reportDir: "${REPORT_DIR}",
-                        reportFiles: 'index.html',
-                        reportName: 'JaCoCo Coverage Report'
-                    ])
+                    script {
+                        if (fileExists("${REPORT_DIR}/index.html")) {
+                            publishHTML(target: [
+                                allowMissing: true,
+                                alwaysLinkToLastBuild: true,
+                                keepAll: true,
+                                reportDir: "${REPORT_DIR}",
+                                reportFiles: 'index.html',
+                                reportName: 'JaCoCo Coverage Report'
+                            ])
+                        } else {
+                            echo "JaCoCo HTML report not found, skip HTML publishing."
+                        }
+                    }
                 }
             }
         }
 
         stage('Coverage Gate') {
+            when {
+                expression { env.UNIT_TEST_OK == 'true' }
+            }
             steps {
                 script {
-                    def coverageCommand = "${env.MVN_CMD} -B jacoco:check " +
-                        "-Djacoco.line.coverage.minimum=${params.LINE_COVERAGE_MIN} " +
-                        "-Djacoco.branch.coverage.minimum=${params.BRANCH_COVERAGE_MIN}"
+                    def lineCoverageMin = params.LINE_COVERAGE_MIN?.trim() ?: '0.60'
+                    def branchCoverageMin = params.BRANCH_COVERAGE_MIN?.trim() ?: '0.40'
+                    def coverageCommand = "${env.MVN_CMD} -B jacoco:check@check " +
+                        "-Djacoco.line.coverage.minimum=${lineCoverageMin} " +
+                        "-Djacoco.branch.coverage.minimum=${branchCoverageMin}"
 
                     if (params.COVERAGE_GATE_STRICT) {
                         catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
@@ -180,6 +254,10 @@ pipeline {
         stage('AI Risk Analysis') {
             steps {
                 script {
+                    def aiProvider = params.AI_PROVIDER?.trim() ?: 'MOCK'
+                    def aiApiBase = params.AI_API_BASE?.trim() ?: 'https://api.openai.com'
+                    def aiModelName = params.AI_MODEL_NAME?.trim() ?: 'gpt-4o-mini'
+                    def aiCredentialsId = params.AI_CREDENTIALS_ID?.trim() ?: 'AI_API_KEY'
                     def failFlag = params.FAIL_ON_AI_ERROR ? '--fail-on-ai-error' : ''
                     def analyzerCommand = """
                         ${env.PYTHON_CMD} scripts/ai_ci_analyzer.py \
@@ -192,20 +270,20 @@ pipeline {
                           ${failFlag}
                     """
                     def aiEnv = [
-                        "AI_PROVIDER=${params.AI_PROVIDER}",
-                        "AI_API_BASE=${params.AI_API_BASE}",
-                        "AI_MODEL_NAME=${params.AI_MODEL_NAME}",
+                        "AI_PROVIDER=${aiProvider}",
+                        "AI_API_BASE=${aiApiBase}",
+                        "AI_MODEL_NAME=${aiModelName}",
                         "AI_TEMPERATURE=0.2",
                         "AI_MAX_TOKENS=4096"
                     ]
 
                     catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
-                        if (params.AI_PROVIDER == 'MOCK') {
+                        if (aiProvider == 'MOCK') {
                             withEnv(aiEnv) {
                                 sh analyzerCommand
                             }
                         } else {
-                            withCredentials([string(credentialsId: params.AI_CREDENTIALS_ID, variable: 'AI_API_KEY')]) {
+                            withCredentials([string(credentialsId: aiCredentialsId, variable: 'AI_API_KEY')]) {
                                 withEnv(aiEnv) {
                                     sh analyzerCommand
                                 }
