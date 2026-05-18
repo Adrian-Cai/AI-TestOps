@@ -1,7 +1,7 @@
 # AI TestOps
 
 [English](README.md) | [中文](README_CN.md)
-
+![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/acai1998/AI-TestOps?utm_source=oss&utm_medium=github&utm_campaign=acai1998%2FAI-TestOps&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
 ---
 
 AI TestOps 是一个面向 **AI 辅助测试设计** 的全链路 Spring Boot 3 + React 演示项目。系统将需求文档接入、文档解析、AI 需求抽取、测试用例草稿生成、自动校验、人工评审确认和用例导出串联成一条轻量闭环，适合验证 AI 辅助测试设计、需求到用例生成、Prompt 版本管理和测试资产沉淀等场景。
