@@ -54,6 +54,18 @@ public final class IdGenerator {
         return next("REV");
     }
 
+    public static String diffRiskCode() {
+        return next("RISK");
+    }
+
+    public static String diffTaskCode() {
+        return next("DTASK");
+    }
+
+    public static String diffReportCode() {
+        return next("DRPT");
+    }
+
     private static String next(String prefix) {
         return "%s_%s_%s".formatted(prefix, LocalDate.now().format(DATE_FORMATTER), uuidSuffix());
     }
