@@ -1,15 +1,14 @@
 package com.example.aitestops.common.util;
 
-import java.security.SecureRandom;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.UUID;
 
 /**
- * 业务 ID 生成工具，使用业务前缀、日期和随机数保证 Demo 阶段可读。
+ * 业务 ID 生成工具，使用业务前缀、日期和 UUID 后缀降低并发碰撞风险。
  */
 public final class IdGenerator {
 
-    private static final SecureRandom RANDOM = new SecureRandom();
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
 
     private IdGenerator() {
@@ -56,7 +55,10 @@ public final class IdGenerator {
     }
 
     private static String next(String prefix) {
-        int random = RANDOM.nextInt(1_000_000);
-        return "%s_%s_%06d".formatted(prefix, LocalDate.now().format(DATE_FORMATTER), random);
+        return "%s_%s_%s".formatted(prefix, LocalDate.now().format(DATE_FORMATTER), uuidSuffix());
+    }
+
+    private static String uuidSuffix() {
+        return UUID.randomUUID().toString().replace("-", "");
     }
 }

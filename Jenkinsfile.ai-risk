@@ -1,0 +1,257 @@
+pipeline {
+    agent any
+
+    parameters {
+        string(
+            name: 'BASE_BRANCH',
+            defaultValue: 'master',
+            description: '用于生成 diff 的基线分支，例如 master 或 main'
+        )
+        choice(
+            name: 'AI_PROVIDER',
+            choices: ['MOCK', 'OPENAI_COMPATIBLE'],
+            description: 'MOCK 只生成本地规则报告；OPENAI_COMPATIBLE 调用兼容 /v1/chat/completions 的模型服务'
+        )
+        string(
+            name: 'AI_API_BASE',
+            defaultValue: 'https://api.openai.com',
+            description: 'AI 服务地址，不需要包含 /v1/chat/completions'
+        )
+        string(
+            name: 'AI_MODEL_NAME',
+            defaultValue: 'gpt-4o-mini',
+            description: 'AI 模型名称'
+        )
+        string(
+            name: 'AI_CREDENTIALS_ID',
+            defaultValue: 'AI_API_KEY',
+            description: 'Jenkins Secret text 凭据 ID'
+        )
+        booleanParam(
+            name: 'FAIL_ON_AI_ERROR',
+            defaultValue: false,
+            description: '远程 AI 调用失败时是否让构建失败'
+        )
+        booleanParam(
+            name: 'COVERAGE_GATE_STRICT',
+            defaultValue: false,
+            description: '覆盖率未达标时是否失败；关闭时仅标记 unstable'
+        )
+        string(
+            name: 'LINE_COVERAGE_MIN',
+            defaultValue: '0.60',
+            description: 'JaCoCo 行覆盖率门禁，例如 0.60'
+        )
+        string(
+            name: 'BRANCH_COVERAGE_MIN',
+            defaultValue: '0.40',
+            description: 'JaCoCo 分支覆盖率门禁，例如 0.40'
+        )
+        string(
+            name: 'EMAIL_TO',
+            defaultValue: '',
+            description: '构建完成后通知邮箱；留空则不发送邮件'
+        )
+    }
+
+    environment {
+        PROJECT_NAME = 'ai-testops'
+        REPORT_DIR = 'target/site/jacoco'
+        JUNIT_REPORT = 'target/surefire-reports/*.xml'
+        JACOCO_XML = 'target/site/jacoco/jacoco.xml'
+        AI_REPORT = 'ai-risk-report.md'
+    }
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+        timeout(time: 30, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '20', artifactNumToKeepStr: '20'))
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Prepare Tools') {
+            steps {
+                script {
+                    env.MVN_CMD = sh(
+                        script: '''
+                            if command -v mvn >/dev/null 2>&1; then
+                                echo "mvn"
+                            else
+                                chmod +x ./mvnw
+                                echo "./mvnw"
+                            fi
+                        ''',
+                        returnStdout: true
+                    ).trim()
+
+                    env.PYTHON_CMD = sh(
+                        script: '''
+                            if command -v python3 >/dev/null 2>&1; then
+                                echo "python3"
+                            elif command -v python >/dev/null 2>&1; then
+                                echo "python"
+                            else
+                                echo "ERROR: python3/python not found" >&2
+                                exit 1
+                            fi
+                        ''',
+                        returnStdout: true
+                    ).trim()
+
+                    echo "Maven command: ${env.MVN_CMD}"
+                    echo "Python command: ${env.PYTHON_CMD}"
+                }
+            }
+        }
+
+        stage('Prepare Diff') {
+            steps {
+                sh '''
+                    set -eu
+
+                    echo "Generate git diff against origin/${BASE_BRANCH} ..."
+                    git fetch origin "${BASE_BRANCH}" --depth=200 || true
+
+                    if git rev-parse --verify "origin/${BASE_BRANCH}" >/dev/null 2>&1; then
+                        git diff "origin/${BASE_BRANCH}...HEAD" --stat > diff-stat.txt || true
+                        git diff "origin/${BASE_BRANCH}...HEAD" > diff-full.patch || true
+                    elif git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
+                        git diff HEAD~1...HEAD --stat > diff-stat.txt || true
+                        git diff HEAD~1...HEAD > diff-full.patch || true
+                    else
+                        : > diff-stat.txt
+                        : > diff-full.patch
+                    fi
+
+                    echo "Diff stat:"
+                    cat diff-stat.txt || true
+                '''
+            }
+        }
+
+        stage('Unit Test + JaCoCo Report') {
+            steps {
+                catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                    sh '${MVN_CMD} -B clean test'
+                }
+            }
+            post {
+                always {
+                    junit allowEmptyResults: true, testResults: "${JUNIT_REPORT}"
+                    publishHTML(target: [
+                        allowMissing: true,
+                        alwaysLinkToLastBuild: true,
+                        keepAll: true,
+                        reportDir: "${REPORT_DIR}",
+                        reportFiles: 'index.html',
+                        reportName: 'JaCoCo Coverage Report'
+                    ])
+                }
+            }
+        }
+
+        stage('Coverage Gate') {
+            steps {
+                script {
+                    def coverageCommand = "${env.MVN_CMD} -B jacoco:check " +
+                        "-Djacoco.line.coverage.minimum=${params.LINE_COVERAGE_MIN} " +
+                        "-Djacoco.branch.coverage.minimum=${params.BRANCH_COVERAGE_MIN}"
+
+                    if (params.COVERAGE_GATE_STRICT) {
+                        catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                            sh coverageCommand
+                        }
+                    } else {
+                        catchError(buildResult: 'UNSTABLE', stageResult: 'UNSTABLE') {
+                            sh coverageCommand
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('AI Risk Analysis') {
+            steps {
+                script {
+                    def failFlag = params.FAIL_ON_AI_ERROR ? '--fail-on-ai-error' : ''
+                    def analyzerCommand = """
+                        ${env.PYTHON_CMD} scripts/ai_ci_analyzer.py \
+                          --project "${PROJECT_NAME}" \
+                          --diff-file diff-full.patch \
+                          --diff-stat diff-stat.txt \
+                          --junit-report "target/surefire-reports" \
+                          --jacoco-xml "${JACOCO_XML}" \
+                          --output "${AI_REPORT}" \
+                          ${failFlag}
+                    """
+                    def aiEnv = [
+                        "AI_PROVIDER=${params.AI_PROVIDER}",
+                        "AI_API_BASE=${params.AI_API_BASE}",
+                        "AI_MODEL_NAME=${params.AI_MODEL_NAME}",
+                        "AI_TEMPERATURE=0.2",
+                        "AI_MAX_TOKENS=4096"
+                    ]
+
+                    catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
+                        if (params.AI_PROVIDER == 'MOCK') {
+                            withEnv(aiEnv) {
+                                sh analyzerCommand
+                            }
+                        } else {
+                            withCredentials([string(credentialsId: params.AI_CREDENTIALS_ID, variable: 'AI_API_KEY')]) {
+                                withEnv(aiEnv) {
+                                    sh analyzerCommand
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            archiveArtifacts artifacts: '''
+                diff-stat.txt,
+                diff-full.patch,
+                ai-risk-report.md,
+                target/site/jacoco/**,
+                target/surefire-reports/**
+            ''', allowEmptyArchive: true, fingerprint: true
+
+            script {
+                if (params.EMAIL_TO?.trim()) {
+                    emailext(
+                        subject: "[${PROJECT_NAME}] AI 测试风险分析：${currentBuild.currentResult} - #${env.BUILD_NUMBER}",
+                        to: params.EMAIL_TO,
+                        mimeType: 'text/html',
+                        attachmentsPattern: 'ai-risk-report.md',
+                        body: """
+                            <h2>${PROJECT_NAME} AI 测试风险分析：${currentBuild.currentResult}</h2>
+                            <p><b>构建编号：</b>#${env.BUILD_NUMBER}</p>
+                            <p><b>分支：</b>${env.BRANCH_NAME ?: env.GIT_BRANCH}</p>
+                            <p><b>构建地址：</b><a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
+                            <h3>核心报告</h3>
+                            <ul>
+                                <li><a href="${env.BUILD_URL}artifact/ai-risk-report.md">AI 风险分析报告</a></li>
+                                <li><a href="${env.BUILD_URL}JaCoCo_20Coverage_20Report/">JaCoCo 覆盖率报告</a></li>
+                                <li><a href="${env.BUILD_URL}testReport/">JUnit 单测报告</a></li>
+                            </ul>
+                            <p>如构建失败或 unstable，请优先查看 AI 风险分析报告中的失败用例、低覆盖率类和上线前检查清单。</p>
+                        """
+                    )
+                } else {
+                    echo "EMAIL_TO is empty, skip email notification."
+                }
+            }
+        }
+    }
+}
