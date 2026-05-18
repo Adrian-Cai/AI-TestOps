@@ -99,20 +99,40 @@ pipeline {
                     } else if (jdk17Home) {
                         env.JAVA_HOME = jdk17Home
                     } else {
-                        def detectedJdk17 = sh(
+                        def detectedJdk = sh(
                             script: '''
-                                for dir in /usr/lib/jvm/java-17* /usr/lib/jvm/jdk-17* /usr/lib/jvm/temurin-17* /opt/java/openjdk /opt/jdk-17*; do
-                                    if [ -x "$dir/bin/javac" ]; then
-                                        echo "$dir"
-                                        exit 0
+                                set -eu
+
+                                supports_release_17() {
+                                    "$1/bin/javac" --release 17 -version >/dev/null 2>&1
+                                }
+
+                                find_jdk_home() {
+                                    for dir in /usr/lib/jvm/java-17* /usr/lib/jvm/jdk-17* /usr/lib/jvm/temurin-17* /opt/java/openjdk /opt/jdk-17*; do
+                                        if [ -x "$dir/bin/javac" ] && supports_release_17 "$dir"; then
+                                            echo "$dir"
+                                            return 0
+                                        fi
+                                    done
+
+                                    if command -v javac >/dev/null 2>&1; then
+                                        javac_bin=$(readlink -f "$(command -v javac)" 2>/dev/null || command -v javac)
+                                        jdk_home=$(dirname "$(dirname "$javac_bin")")
+                                        if [ -x "$jdk_home/bin/java" ] && [ -x "$jdk_home/bin/javac" ] && supports_release_17 "$jdk_home"; then
+                                            echo "$jdk_home"
+                                            return 0
+                                        fi
                                     fi
-                                done
-                                exit 0
+
+                                    return 1
+                                }
+
+                                find_jdk_home || true
                             ''',
                             returnStdout: true
                         ).trim()
-                        if (detectedJdk17) {
-                            env.JAVA_HOME = detectedJdk17
+                        if (detectedJdk) {
+                            env.JAVA_HOME = detectedJdk
                         }
                     }
 
@@ -151,15 +171,34 @@ pipeline {
 
                     sh '''
                         set -eu
-                        echo "JAVA_HOME=${JAVA_HOME:-}"
-                        java -version
-                        javac -version
-                        JAVA_MAJOR=$(javac -version 2>&1 | awk '{print $2}' | cut -d. -f1)
-                        if [ "$JAVA_MAJOR" -lt 17 ]; then
-                            echo "[ERROR] This project requires JDK 17, but current javac is: $(javac -version 2>&1)"
-                            echo "[ERROR] Install JDK 17 on the Jenkins node, or set JDK_TOOL_NAME/JDK17_HOME for this job."
+                        if [ -z "${JAVA_HOME:-}" ]; then
+                            echo "[ERROR] No JDK home configured or detected."
+                            echo "[ERROR] Set JDK_TOOL_NAME to a Jenkins JDK tool, or set JDK17_HOME to a JDK 17+ installation."
                             exit 1
                         fi
+                        if [ ! -x "${JAVA_HOME}/bin/java" ] || [ ! -x "${JAVA_HOME}/bin/javac" ]; then
+                            echo "[ERROR] JAVA_HOME must point to a full JDK with java and javac: ${JAVA_HOME}"
+                            exit 1
+                        fi
+                        echo "JAVA_HOME=${JAVA_HOME:-}"
+                        "${JAVA_HOME}/bin/java" -version
+                        "${JAVA_HOME}/bin/javac" -version
+                        JAVA_VERSION=$("${JAVA_HOME}/bin/javac" -version 2>&1 | awk '{print $2}')
+                        case "$JAVA_VERSION" in
+                            1.*) JAVA_MAJOR=$(echo "$JAVA_VERSION" | cut -d. -f2) ;;
+                            *) JAVA_MAJOR=$(echo "$JAVA_VERSION" | sed 's/[^0-9].*$//') ;;
+                        esac
+                        if [ "$JAVA_MAJOR" -lt 17 ]; then
+                            echo "[ERROR] This project requires JDK 17+, but current javac is: javac ${JAVA_VERSION}"
+                            echo "[ERROR] Install JDK 17+ on the Jenkins node, or set JDK_TOOL_NAME/JDK17_HOME for this job."
+                            exit 1
+                        fi
+                        SMOKE_DIR=target/javac-release-smoke
+                        rm -rf "$SMOKE_DIR"
+                        mkdir -p "$SMOKE_DIR"
+                        printf 'class Release17Smoke {}\\n' > "$SMOKE_DIR/Release17Smoke.java"
+                        "${JAVA_HOME}/bin/javac" --release 17 -d "$SMOKE_DIR" "$SMOKE_DIR/Release17Smoke.java"
+                        rm -rf "$SMOKE_DIR"
                         ${MVN_CMD} -version
                     '''
                 }

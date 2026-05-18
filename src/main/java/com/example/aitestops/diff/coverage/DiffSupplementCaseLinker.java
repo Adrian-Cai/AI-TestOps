@@ -1,11 +1,8 @@
 package com.example.aitestops.diff.coverage;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.example.aitestops.diff.entity.AiTestopsDiffRiskCaseRel;
 import com.example.aitestops.diff.entity.AiTestopsDiffRiskItem;
 import com.example.aitestops.diff.enums.DiffCoverageStatusEnum;
-import com.example.aitestops.diff.enums.DiffMergeGateStatusEnum;
-import com.example.aitestops.diff.enums.DiffRiskLevelEnum;
 import com.example.aitestops.diff.enums.DiffRiskProcessStatusEnum;
 import com.example.aitestops.diff.gate.DiffMergeGateResolver;
 import com.example.aitestops.diff.service.AiTestopsDiffRiskCaseRelService;

@@ -286,7 +286,7 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
     @Override
     @Transactional
     public void verifyRisk(Long riskId, DiffRiskVerifyRequest request) {
-        AiTestopsDiffRiskItem risk = requireRisk(riskId);
+        requireRisk(riskId);
         String result = request == null ? null : request.getVerifyResult();
         DiffRiskActionRequest actionRequest = new DiffRiskActionRequest();
         actionRequest.setOperator(request == null ? null : request.getOperator());

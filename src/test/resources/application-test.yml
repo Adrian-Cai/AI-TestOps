@@ -36,3 +36,6 @@ ai-testops:
     api-base: https://api.openai.com
     api-key:
     json-mode: false
+  diff:
+    git:
+      allow-local-repository: true

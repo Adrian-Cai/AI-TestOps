@@ -211,3 +211,148 @@ CREATE TABLE ai_testops_review_record (
   PRIMARY KEY (id),
   UNIQUE KEY uk_review_record_id (review_record_id)
 );
+
+DROP TABLE IF EXISTS ai_testops_diff_risk_action_record;
+DROP TABLE IF EXISTS ai_testops_diff_risk_case_rel;
+DROP TABLE IF EXISTS ai_testops_diff_risk_item;
+DROP TABLE IF EXISTS ai_testops_diff_merge_gate_report;
+DROP TABLE IF EXISTS ai_testops_diff_changed_file;
+DROP TABLE IF EXISTS ai_testops_diff_analysis_task;
+
+CREATE TABLE ai_testops_diff_analysis_task (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  task_code VARCHAR(64) NOT NULL,
+  document_id VARCHAR(64) NULL,
+  requirement_extract_id VARCHAR(64) NULL,
+  repo_url VARCHAR(500) NULL,
+  repo_name VARCHAR(128) NULL,
+  source_branch VARCHAR(255) NULL,
+  target_branch VARCHAR(255) NULL,
+  base_commit VARCHAR(64) NULL,
+  head_commit VARCHAR(64) NULL,
+  analysis_options LONGTEXT NULL,
+  status VARCHAR(32) NOT NULL,
+  fail_reason VARCHAR(1000) NULL,
+  changed_file_count INT NULL,
+  changed_method_count INT NULL,
+  high_risk_count INT NULL,
+  medium_risk_count INT NULL,
+  low_risk_count INT NULL,
+  not_covered_risk_count INT NULL,
+  merge_gate_status VARCHAR(32) NULL,
+  created_by VARCHAR(128) NULL,
+  created_at DATETIME NOT NULL,
+  updated_by VARCHAR(128) NULL,
+  updated_at DATETIME NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_task_code (task_code)
+);
+
+CREATE TABLE ai_testops_diff_changed_file (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  task_id BIGINT NOT NULL,
+  old_file_path VARCHAR(1000) NULL,
+  new_file_path VARCHAR(1000) NOT NULL,
+  change_type VARCHAR(32) NOT NULL,
+  language VARCHAR(32) NULL,
+  file_role VARCHAR(32) NULL,
+  additions INT NULL,
+  deletions INT NULL,
+  changes INT NULL,
+  patch LONGTEXT NULL,
+  patch_summary LONGTEXT NULL,
+  is_test_file TINYINT NULL DEFAULT 0,
+  is_core_file TINYINT NULL DEFAULT 0,
+  initial_risk_level VARCHAR(32) NULL,
+  initial_risk_reason VARCHAR(1000) NULL,
+  created_at DATETIME NOT NULL,
+  PRIMARY KEY (id)
+);
+
+CREATE TABLE ai_testops_diff_risk_item (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  task_id BIGINT NOT NULL,
+  document_id VARCHAR(64) NULL,
+  requirement_extract_id VARCHAR(64) NULL,
+  risk_code VARCHAR(64) NOT NULL,
+  risk_title VARCHAR(255) NOT NULL,
+  risk_level VARCHAR(32) NOT NULL,
+  risk_category VARCHAR(64) NULL,
+  source_type VARCHAR(32) NOT NULL,
+  source_rule_code VARCHAR(64) NULL,
+  affected_module VARCHAR(500) NULL,
+  affected_scenarios LONGTEXT NULL,
+  risk_reason LONGTEXT NULL,
+  test_suggestion LONGTEXT NULL,
+  missing_test_scenarios LONGTEXT NULL,
+  ai_confidence DECIMAL(5,4) NULL,
+  coverage_status VARCHAR(32) NOT NULL,
+  coverage_reason VARCHAR(1000) NULL,
+  process_status VARCHAR(32) NOT NULL,
+  merge_gate_impact VARCHAR(32) NULL,
+  ignore_reason VARCHAR(1000) NULL,
+  owner VARCHAR(128) NULL,
+  created_by VARCHAR(128) NULL,
+  created_at DATETIME NOT NULL,
+  updated_by VARCHAR(128) NULL,
+  updated_at DATETIME NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_risk_code (risk_code)
+);
+
+CREATE TABLE ai_testops_diff_risk_case_rel (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  risk_id BIGINT NOT NULL,
+  case_id BIGINT NOT NULL,
+  document_id VARCHAR(64) NULL,
+  requirement_extract_id VARCHAR(64) NULL,
+  case_source_type VARCHAR(32) NOT NULL,
+  relation_type VARCHAR(32) NOT NULL,
+  coverage_judgement VARCHAR(32) NULL,
+  judgement_reason VARCHAR(1000) NULL,
+  similarity_score DECIMAL(5,4) NULL,
+  generated_from_ai TINYINT NULL DEFAULT 0,
+  created_by VARCHAR(128) NULL,
+  created_at DATETIME NOT NULL,
+  PRIMARY KEY (id)
+);
+
+CREATE TABLE ai_testops_diff_risk_action_record (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  risk_id BIGINT NOT NULL,
+  task_id BIGINT NOT NULL,
+  action_type VARCHAR(64) NOT NULL,
+  before_status VARCHAR(32) NULL,
+  after_status VARCHAR(32) NULL,
+  action_desc VARCHAR(1000) NULL,
+  action_payload LONGTEXT NULL,
+  operator VARCHAR(128) NULL,
+  created_at DATETIME NOT NULL,
+  PRIMARY KEY (id)
+);
+
+CREATE TABLE ai_testops_diff_merge_gate_report (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  task_id BIGINT NOT NULL,
+  report_code VARCHAR(64) NOT NULL,
+  gate_status VARCHAR(32) NOT NULL,
+  gate_reason VARCHAR(1000) NULL,
+  changed_file_count INT NULL,
+  changed_method_count INT NULL,
+  high_risk_count INT NULL,
+  medium_risk_count INT NULL,
+  low_risk_count INT NULL,
+  covered_risk_count INT NULL,
+  partial_covered_risk_count INT NULL,
+  not_covered_risk_count INT NULL,
+  need_confirm_risk_count INT NULL,
+  blocked_risk_count INT NULL,
+  suggested_case_count INT NULL,
+  suggested_regression_modules LONGTEXT NULL,
+  report_summary LONGTEXT NULL,
+  report_detail LONGTEXT NULL,
+  created_by VARCHAR(128) NULL,
+  created_at DATETIME NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_report_code (report_code)
+);
