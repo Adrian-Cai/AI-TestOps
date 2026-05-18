@@ -899,3 +899,48 @@ git diff 生成 diff-full.patch
 Diff 增量覆盖率
 AI 自动补充用例建议
 这样落地节奏比较稳
+
+十三、当前仓库第一版落地方式
+本仓库已先落地最小可跑版本，避免影响现有部署流水线。
+
+已新增 / 修改：
+- `pom.xml`：加入 `maven-surefire-plugin` 与 `jacoco-maven-plugin`，`mvn test` 会生成 `target/site/jacoco/jacoco.xml` 和 HTML 覆盖率报告。
+- `scripts/ai_ci_analyzer.py`：读取 diff、JUnit、JaCoCo，生成 `ai-risk-report.md`。
+- `scripts/tests/test_ai_ci_analyzer.py`：覆盖脚本的 JUnit、JaCoCo 解析逻辑。
+- `Jenkinsfile.ai-risk`：独立的 Jenkins 质量分析流水线，不覆盖当前部署用 `Jenkinsfile`。
+
+Jenkins 新建任务建议：
+1. 新建 Pipeline 任务，例如 `ai-testops-risk-analysis`。
+2. Pipeline 选择 `Pipeline script from SCM`。
+3. 仓库地址使用当前项目仓库。
+4. Script Path 填：`Jenkinsfile.ai-risk`。
+5. 第一次运行保持 `AI_PROVIDER=MOCK`，先确认单测、覆盖率、归档和邮件链路能跑通。
+6. 跑通后，在 Jenkins Credentials 中增加 Secret text：
+   - ID：`AI_API_KEY`
+   - Secret：你的 OpenAI-compatible API Key
+7. 第二次运行时把 `AI_PROVIDER` 改为 `OPENAI_COMPATIBLE`，按实际情况设置：
+   - `AI_API_BASE`：例如 `https://api.openai.com`
+   - `AI_MODEL_NAME`：例如 `gpt-4o-mini`
+   - `AI_CREDENTIALS_ID`：默认 `AI_API_KEY`
+8. 如需邮件通知，填写 `EMAIL_TO`；留空则只归档报告，不发邮件。
+
+第一阶段建议参数：
+```text
+AI_PROVIDER=MOCK
+COVERAGE_GATE_STRICT=false
+LINE_COVERAGE_MIN=0.60
+BRANCH_COVERAGE_MIN=0.40
+FAIL_ON_AI_ERROR=false
+```
+
+本地验证命令：
+```bash
+python -m unittest scripts.tests.test_ai_ci_analyzer
+mvn -B clean test
+mvn -B jacoco:check -Djacoco.line.coverage.minimum=0.60 -Djacoco.branch.coverage.minimum=0.40
+```
+
+注意：
+- `AI_PROVIDER=MOCK` 时不会调用外部模型，会输出本地规则版风险报告，适合首次联调。
+- 远程 AI 调用失败时，默认仍会生成降级报告；如果希望失败即阻断，把 `FAIL_ON_AI_ERROR=true`。
+- 当前版本先做代码覆盖率与测试结果分析；接口覆盖率、业务流映射、线上 Bug 定位建议作为第二阶段继续补充。
