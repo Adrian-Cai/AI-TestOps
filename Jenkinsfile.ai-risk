@@ -64,6 +64,7 @@ pipeline {
 
     options {
         timestamps()
+        skipDefaultCheckout(true)
         disableConcurrentBuilds()
         timeout(time: 30, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '20', artifactNumToKeepStr: '20'))
@@ -113,26 +114,31 @@ pipeline {
 
         stage('Prepare Diff') {
             steps {
-                sh '''
-                    set -eu
+                script {
+                    def baseBranch = params.BASE_BRANCH?.trim() ?: 'master'
+                    withEnv(["BASE_BRANCH=${baseBranch}"]) {
+                        sh '''
+                            set -eu
 
-                    echo "Generate git diff against origin/${BASE_BRANCH} ..."
-                    git fetch origin "${BASE_BRANCH}" --depth=200 || true
+                            echo "Generate git diff against origin/${BASE_BRANCH} ..."
+                            git fetch origin "${BASE_BRANCH}" --depth=200 || true
 
-                    if git rev-parse --verify "origin/${BASE_BRANCH}" >/dev/null 2>&1; then
-                        git diff "origin/${BASE_BRANCH}...HEAD" --stat > diff-stat.txt || true
-                        git diff "origin/${BASE_BRANCH}...HEAD" > diff-full.patch || true
-                    elif git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
-                        git diff HEAD~1...HEAD --stat > diff-stat.txt || true
-                        git diff HEAD~1...HEAD > diff-full.patch || true
-                    else
-                        : > diff-stat.txt
-                        : > diff-full.patch
-                    fi
+                            if git rev-parse --verify "origin/${BASE_BRANCH}" >/dev/null 2>&1; then
+                                git diff "origin/${BASE_BRANCH}...HEAD" --stat > diff-stat.txt || true
+                                git diff "origin/${BASE_BRANCH}...HEAD" > diff-full.patch || true
+                            elif git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
+                                git diff HEAD~1...HEAD --stat > diff-stat.txt || true
+                                git diff HEAD~1...HEAD > diff-full.patch || true
+                            else
+                                : > diff-stat.txt
+                                : > diff-full.patch
+                            fi
 
-                    echo "Diff stat:"
-                    cat diff-stat.txt || true
-                '''
+                            echo "Diff stat:"
+                            cat diff-stat.txt || true
+                        '''
+                    }
+                }
             }
         }
 
@@ -160,9 +166,11 @@ pipeline {
         stage('Coverage Gate') {
             steps {
                 script {
+                    def lineCoverageMin = params.LINE_COVERAGE_MIN?.trim() ?: '0.60'
+                    def branchCoverageMin = params.BRANCH_COVERAGE_MIN?.trim() ?: '0.40'
                     def coverageCommand = "${env.MVN_CMD} -B jacoco:check " +
-                        "-Djacoco.line.coverage.minimum=${params.LINE_COVERAGE_MIN} " +
-                        "-Djacoco.branch.coverage.minimum=${params.BRANCH_COVERAGE_MIN}"
+                        "-Djacoco.line.coverage.minimum=${lineCoverageMin} " +
+                        "-Djacoco.branch.coverage.minimum=${branchCoverageMin}"
 
                     if (params.COVERAGE_GATE_STRICT) {
                         catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
@@ -180,6 +188,10 @@ pipeline {
         stage('AI Risk Analysis') {
             steps {
                 script {
+                    def aiProvider = params.AI_PROVIDER?.trim() ?: 'MOCK'
+                    def aiApiBase = params.AI_API_BASE?.trim() ?: 'https://api.openai.com'
+                    def aiModelName = params.AI_MODEL_NAME?.trim() ?: 'gpt-4o-mini'
+                    def aiCredentialsId = params.AI_CREDENTIALS_ID?.trim() ?: 'AI_API_KEY'
                     def failFlag = params.FAIL_ON_AI_ERROR ? '--fail-on-ai-error' : ''
                     def analyzerCommand = """
                         ${env.PYTHON_CMD} scripts/ai_ci_analyzer.py \
@@ -192,20 +204,20 @@ pipeline {
                           ${failFlag}
                     """
                     def aiEnv = [
-                        "AI_PROVIDER=${params.AI_PROVIDER}",
-                        "AI_API_BASE=${params.AI_API_BASE}",
-                        "AI_MODEL_NAME=${params.AI_MODEL_NAME}",
+                        "AI_PROVIDER=${aiProvider}",
+                        "AI_API_BASE=${aiApiBase}",
+                        "AI_MODEL_NAME=${aiModelName}",
                         "AI_TEMPERATURE=0.2",
                         "AI_MAX_TOKENS=4096"
                     ]
 
                     catchError(buildResult: 'FAILURE', stageResult: 'FAILURE') {
-                        if (params.AI_PROVIDER == 'MOCK') {
+                        if (aiProvider == 'MOCK') {
                             withEnv(aiEnv) {
                                 sh analyzerCommand
                             }
                         } else {
-                            withCredentials([string(credentialsId: params.AI_CREDENTIALS_ID, variable: 'AI_API_KEY')]) {
+                            withCredentials([string(credentialsId: aiCredentialsId, variable: 'AI_API_KEY')]) {
                                 withEnv(aiEnv) {
                                     sh analyzerCommand
                                 }
