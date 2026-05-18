@@ -16,7 +16,7 @@ jmeter/
 ├── 压测接口文档.md                 # 接口、造数、指标与计划
 ├── README.md
 ├── data/
-│   ├── upload-iterations.csv
+│   ├── upload-files.csv
 │   └── draft-groups.csv
 └── results/
 ```
@@ -34,8 +34,10 @@ jmeter/
 先进入 JMeter 文件目录：
 
 ```powershell
-cd D:\AllProject\AI-TestOps\scripts\perf\jmeter
+cd D:\AllProject\AI-TestOps\docs\jmeter
 ```
+
+当前唯一维护的 JMeter 计划是 `docs/jmeter/ai-testops-main-flow.jmx`。旧实验版 `HTTP请求.jmx` 不再维护，避免重复 sampler 造成流量失真。
 
 ### 1. Smoke：上传 + 解析
 
@@ -49,6 +51,7 @@ jmeter -n `
   -Jramp.seconds=5 `
   -Jduration.seconds=30 `
   -Jthink.time.ms=1000 `
+  -Jupload.files=data/upload-files.csv `
   -l results/upload-parse-smoke.jtl `
   -e -o results/upload-parse-smoke-report
 ```
@@ -65,11 +68,29 @@ jmeter -n `
   -Jramp.seconds=30 `
   -Jduration.seconds=300 `
   -Jthink.time.ms=1000 `
+  -Jupload.files=data/upload-files.csv `
   -l results/upload-parse-baseline.jtl `
   -e -o results/upload-parse-baseline-report
 ```
 
-### 3. 批量确认 + 导出
+### 3. 上传文件轮询数据
+
+上传场景通过 CSV 轮询文件，格式固定为：
+
+```csv
+filePath,fileName,mimeType
+D:\DOCS\file-1.docx,file-1.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document
+D:\DOCS\file-2.txt,file-2.txt,text/plain
+D:\DOCS\file-3.md,file-3.md,text/markdown
+```
+
+推荐三组复压数据：
+
+- 中文单文件：CSV 只保留中文文件一行，用于验证中文文件名链路。
+- 英文单文件：CSV 只保留英文文件一行，用于排除中文文件名影响。
+- 多文件轮询：CSV 放多行不同内容文件，用于验证并发创建 document 和解析稳定性。
+
+### 4. 批量确认 + 导出
 
 先把 `data/draft-groups.csv` 替换为真实待确认草稿数据，不能重复消费同一批 `draftCaseIds`。
 
@@ -116,7 +137,7 @@ jmeter -n `
 | `ramp.seconds` | `10` | 线程启动爬坡时间 |
 | `duration.seconds` | `60` | 压测持续时间 |
 | `think.time.ms` | `1000` | 每轮业务流程后的等待时间 |
-| `upload.file` | `../fixtures/需求文档01_智能订单履约与售后协同系统.md` | 上传文件路径 |
+| `upload.files` | `data/upload-files.csv` | 上传文件轮询 CSV，列为 `filePath,fileName,mimeType` |
 | `export.json` | `true` | 是否导出 JSON |
 | `export.excel` | `true` | 是否导出 Excel |
 

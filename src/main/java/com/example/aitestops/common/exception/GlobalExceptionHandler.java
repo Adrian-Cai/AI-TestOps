@@ -1,6 +1,7 @@
 package com.example.aitestops.common.exception;
 
 import com.example.aitestops.common.response.ApiResponse;
+import com.example.aitestops.common.util.TraceIdUtil;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -24,56 +25,64 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BusinessException.class)
     public ApiResponse<Void> handleBusinessException(BusinessException ex) {
-        log.warn("业务异常: code={}, message={}", ex.getCode(), ex.getMessage(), ex);
-        return ApiResponse.fail(ex.getCode(), ex.getMessage());
+        String traceId = TraceIdUtil.ensureTraceId();
+        log.warn("业务异常: traceId={}, code={}, message={}", traceId, ex.getCode(), ex.getMessage(), ex);
+        return ApiResponse.fail(ex.getCode(), ex.getMessage(), traceId);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ApiResponse<Void> handleMethodArgumentNotValidException(MethodArgumentNotValidException ex) {
+        String traceId = TraceIdUtil.ensureTraceId();
         String message = ex.getBindingResult().getFieldErrors().stream()
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
                 .collect(Collectors.joining("; "));
-        log.warn("请求体参数校验失败: {}", message);
-        return ApiResponse.fail(ErrorCode.BAD_REQUEST.getCode(), message);
+        log.warn("请求体参数校验失败: traceId={}, message={}", traceId, message);
+        return ApiResponse.fail(ErrorCode.BAD_REQUEST.getCode(), message, traceId);
     }
 
     @ExceptionHandler(BindException.class)
     public ApiResponse<Void> handleBindException(BindException ex) {
+        String traceId = TraceIdUtil.ensureTraceId();
         String message = ex.getBindingResult().getFieldErrors().stream()
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
                 .collect(Collectors.joining("; "));
-        log.warn("请求参数绑定失败: {}", message);
-        return ApiResponse.fail(ErrorCode.BAD_REQUEST.getCode(), message);
+        log.warn("请求参数绑定失败: traceId={}, message={}", traceId, message);
+        return ApiResponse.fail(ErrorCode.BAD_REQUEST.getCode(), message, traceId);
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
     public ApiResponse<Void> handleConstraintViolationException(ConstraintViolationException ex) {
-        log.warn("请求参数校验失败: {}", ex.getMessage());
-        return ApiResponse.fail(ErrorCode.BAD_REQUEST.getCode(), ex.getMessage());
+        String traceId = TraceIdUtil.ensureTraceId();
+        log.warn("请求参数校验失败: traceId={}, message={}", traceId, ex.getMessage());
+        return ApiResponse.fail(ErrorCode.BAD_REQUEST.getCode(), ex.getMessage(), traceId);
     }
 
     @ExceptionHandler({HttpMessageNotReadableException.class, MultipartException.class})
     public ApiResponse<Void> handleRequestException(Exception ex) {
-        log.warn("请求内容无法读取: {}", ex.getMessage(), ex);
-        return ApiResponse.fail(ErrorCode.BAD_REQUEST.getCode(), "请求内容无法读取");
+        String traceId = TraceIdUtil.ensureTraceId();
+        log.warn("请求内容无法读取: traceId={}, message={}", traceId, ex.getMessage(), ex);
+        return ApiResponse.fail(ErrorCode.BAD_REQUEST.getCode(), "请求内容无法读取", traceId);
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ApiResponse<Void> handleMaxUploadSizeExceededException(MaxUploadSizeExceededException ex) {
-        log.warn("文件超过 Spring Multipart 限制: {}", ex.getMessage(), ex);
-        return ApiResponse.fail(ErrorCode.FILE_TOO_LARGE.getCode(), ErrorCode.FILE_TOO_LARGE.getMessage());
+        String traceId = TraceIdUtil.ensureTraceId();
+        log.warn("文件超过 Spring Multipart 限制: traceId={}, message={}", traceId, ex.getMessage(), ex);
+        return ApiResponse.fail(ErrorCode.FILE_TOO_LARGE.getCode(), ErrorCode.FILE_TOO_LARGE.getMessage(), traceId);
     }
 
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<ApiResponse<Void>> handleNoResourceFoundException(NoResourceFoundException ex) {
-        log.debug("静态资源不存在: {}", ex.getResourcePath());
+        String traceId = TraceIdUtil.ensureTraceId();
+        log.debug("静态资源不存在: traceId={}, path={}", traceId, ex.getResourcePath());
         return ResponseEntity.status(ex.getStatusCode())
-                .body(ApiResponse.fail(ErrorCode.RESOURCE_NOT_FOUND.getCode(), ErrorCode.RESOURCE_NOT_FOUND.getMessage()));
+                .body(ApiResponse.fail(ErrorCode.RESOURCE_NOT_FOUND.getCode(), ErrorCode.RESOURCE_NOT_FOUND.getMessage(), traceId));
     }
 
     @ExceptionHandler(Exception.class)
     public ApiResponse<Void> handleException(Exception ex) {
-        log.error("未处理系统异常", ex);
-        return ApiResponse.fail(ErrorCode.INTERNAL_ERROR.getCode(), ErrorCode.INTERNAL_ERROR.getMessage());
+        String traceId = TraceIdUtil.ensureTraceId();
+        log.error("未处理系统异常: traceId={}", traceId, ex);
+        return ApiResponse.fail(ErrorCode.INTERNAL_ERROR.getCode(), ErrorCode.INTERNAL_ERROR.getMessage(), traceId);
     }
 }

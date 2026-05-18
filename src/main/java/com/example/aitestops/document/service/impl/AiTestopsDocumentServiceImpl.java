@@ -12,6 +12,7 @@ import com.example.aitestops.common.util.FileHashUtil;
 import com.example.aitestops.common.util.FileNameUtil;
 import com.example.aitestops.common.util.IdGenerator;
 import com.example.aitestops.common.util.JsonUtil;
+import com.example.aitestops.common.util.TraceIdUtil;
 import com.example.aitestops.document.dto.TextDocumentCreateRequest;
 import com.example.aitestops.document.entity.AiTestopsDocument;
 import com.example.aitestops.document.entity.AiTestopsDocumentChunk;
@@ -101,32 +102,39 @@ public class AiTestopsDocumentServiceImpl
         String originalFilename = FileNameUtil.cleanOriginalFilename(file.getOriginalFilename());
         String extension = FileNameUtil.extension(originalFilename);
         String documentId = IdGenerator.documentId();
-        String fileHash = calculateFileHash(file);
-        AiTestopsDocument duplicate = findDuplicate(fileHash);
-        Path savedPath = saveUploadedFile(file, documentId, originalFilename);
+        String fileHash = null;
 
-        LocalDateTime now = LocalDateTime.now();
-        AiTestopsDocument document = new AiTestopsDocument();
-        document.setDocumentId(documentId);
-        document.setTitle(StringUtils.hasText(title) ? title.trim() : originalFilename);
-        document.setSourceType(SourceTypeEnum.FILE.name());
-        document.setFileName(originalFilename);
-        document.setFileType(extension);
-        document.setFilePath(savedPath.toString());
-        document.setFileSize(file.getSize());
-        document.setFileHash(fileHash);
-        document.setDuplicateDocumentId(duplicate == null ? null : duplicate.getDocumentId());
-        document.setParseStatus(ParseStatusEnum.PENDING.name());
-        document.setUploadedAt(now);
-        document.setCreatedAt(now);
-        document.setUpdatedAt(now);
+        try {
+            fileHash = calculateFileHash(file);
+            AiTestopsDocument duplicate = findDuplicate(fileHash);
+            Path savedPath = saveUploadedFile(file, documentId, extension);
 
-        if (!save(document)) {
-            throw new BusinessException(ErrorCode.DATABASE_SAVE_FAILED, "上传 document 保存失败");
+            LocalDateTime now = LocalDateTime.now();
+            AiTestopsDocument document = new AiTestopsDocument();
+            document.setDocumentId(documentId);
+            document.setTitle(StringUtils.hasText(title) ? title.trim() : originalFilename);
+            document.setSourceType(SourceTypeEnum.FILE.name());
+            document.setFileName(originalFilename);
+            document.setFileType(extension);
+            document.setFilePath(savedPath.toString());
+            document.setFileSize(file.getSize());
+            document.setFileHash(fileHash);
+            document.setDuplicateDocumentId(duplicate == null ? null : duplicate.getDocumentId());
+            document.setParseStatus(ParseStatusEnum.PENDING.name());
+            document.setUploadedAt(now);
+            document.setCreatedAt(now);
+            document.setUpdatedAt(now);
+
+            if (!save(document)) {
+                throw new BusinessException(ErrorCode.DATABASE_SAVE_FAILED, "上传 document 保存失败");
+            }
+            log.info("文件上传完成: documentId={}, fileHash={}, duplicateDocumentId={}",
+                    documentId, fileHash, document.getDuplicateDocumentId());
+            return toDocumentVO(document);
+        } catch (RuntimeException ex) {
+            logUploadFailure(documentId, originalFilename, file.getSize(), fileHash, ex);
+            throw ex;
         }
-        log.info("文件上传完成: documentId={}, fileHash={}, duplicateDocumentId={}",
-                documentId, fileHash, document.getDuplicateDocumentId());
-        return toDocumentVO(document);
     }
 
     @Override
@@ -163,11 +171,11 @@ public class AiTestopsDocumentServiceImpl
             return summaryVO;
         } catch (BusinessException ex) {
             updateParseStatus(documentId, ParseStatusEnum.FAILED, truncate(ex.getMessage(), 1000), LocalDateTime.now());
-            log.error("文档解析失败: documentId={}, message={}", documentId, ex.getMessage(), ex);
+            logParseFailure(document, ex);
             throw ex;
         } catch (Exception ex) {
             updateParseStatus(documentId, ParseStatusEnum.FAILED, truncate(ex.getMessage(), 1000), LocalDateTime.now());
-            log.error("文档解析失败: documentId={}", documentId, ex);
+            logParseFailure(document, ex);
             throw new BusinessException(ErrorCode.TIKA_PARSE_FAILED, "文档解析失败: " + ex.getMessage(), ex);
         }
     }
@@ -226,12 +234,12 @@ public class AiTestopsDocumentServiceImpl
                 .last("limit 1"), false);
     }
 
-    private Path saveUploadedFile(MultipartFile file, String documentId, String originalFilename) {
+    private Path saveUploadedFile(MultipartFile file, String documentId, String extension) {
         try {
             Path baseDir = Path.of(fileUploadProperties.getUploadDir()).toAbsolutePath().normalize();
             Path dateDir = baseDir.resolve(LocalDate.now().format(DATE_DIR_FORMATTER)).normalize();
             Files.createDirectories(dateDir);
-            Path target = dateDir.resolve(documentId + "_" + originalFilename).normalize();
+            Path target = dateDir.resolve(documentId + "." + extension).normalize();
             if (!target.startsWith(baseDir)) {
                 throw new BusinessException(ErrorCode.FILE_SAVE_FAILED, "文件保存路径非法");
             }
@@ -241,6 +249,17 @@ public class AiTestopsDocumentServiceImpl
         } catch (IOException ex) {
             throw new BusinessException(ErrorCode.FILE_SAVE_FAILED, "文件保存失败: " + ex.getMessage(), ex);
         }
+    }
+
+    private void logUploadFailure(String documentId, String fileName, Long fileSize, String fileHash, RuntimeException ex) {
+        log.error("文件上传失败: traceId={}, documentId={}, fileName={}, fileSize={}, fileHash={}, message={}",
+                TraceIdUtil.currentTraceIdOrDefault(), documentId, fileName, fileSize, fileHash, ex.getMessage(), ex);
+    }
+
+    private void logParseFailure(AiTestopsDocument document, Exception ex) {
+        log.error("文档解析失败: traceId={}, documentId={}, fileName={}, fileSize={}, fileHash={}, message={}",
+                TraceIdUtil.currentTraceIdOrDefault(), document.getDocumentId(), document.getFileName(),
+                document.getFileSize(), document.getFileHash(), ex.getMessage(), ex);
     }
 
     private ParsedDocument parseBySourceType(AiTestopsDocument document) {

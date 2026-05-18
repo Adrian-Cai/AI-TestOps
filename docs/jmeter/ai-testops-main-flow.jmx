@@ -47,9 +47,9 @@
             <stringProp name="Argument.value">${__P(think.time.ms,1000)}</stringProp>
             <stringProp name="Argument.metadata">=</stringProp>
           </elementProp>
-          <elementProp name="UPLOAD_FILE" elementType="Argument">
-            <stringProp name="Argument.name">UPLOAD_FILE</stringProp>
-            <stringProp name="Argument.value">${__P(upload.file,../fixtures/需求文档01_智能订单履约与售后协同系统.md)}</stringProp>
+          <elementProp name="UPLOAD_FILES_CSV" elementType="Argument">
+            <stringProp name="Argument.name">UPLOAD_FILES_CSV</stringProp>
+            <stringProp name="Argument.value">${__P(upload.files,data/upload-files.csv)}</stringProp>
             <stringProp name="Argument.metadata">=</stringProp>
           </elementProp>
           <elementProp name="EXPORT_JSON" elementType="Argument">
@@ -107,13 +107,13 @@
             <boolProp name="TransactionController.includeTimers">false</boolProp>
           </TransactionController>
           <hashTree>
-            <CSVDataSet guiclass="TestBeanGUI" testclass="CSVDataSet" testname="上传迭代数据" enabled="true">
-              <stringProp name="filename">data/upload-iterations.csv</stringProp>
+            <CSVDataSet guiclass="TestBeanGUI" testclass="CSVDataSet" testname="上传文件轮询数据" enabled="true">
+              <stringProp name="filename">${UPLOAD_FILES_CSV}</stringProp>
               <stringProp name="fileEncoding">UTF-8</stringProp>
-              <stringProp name="variableNames">iteration</stringProp>
+              <stringProp name="variableNames">filePath,fileName,mimeType</stringProp>
               <boolProp name="ignoreFirstLine">true</boolProp>
               <stringProp name="delimiter">,</stringProp>
-              <boolProp name="quotedData">false</boolProp>
+              <boolProp name="quotedData">true</boolProp>
               <boolProp name="recycle">true</boolProp>
               <boolProp name="stopThread">false</boolProp>
               <stringProp name="shareMode">shareMode.all</stringProp>
@@ -126,7 +126,7 @@
                   <elementProp name="title" elementType="HTTPArgument">
                     <boolProp name="HTTPArgument.always_encode">false</boolProp>
                     <stringProp name="Argument.name">title</stringProp>
-                    <stringProp name="Argument.value">perf-upload-${__time(,)}-${iteration}</stringProp>
+                    <stringProp name="Argument.value">perf-upload-${__time(,)}-${__threadNum}-${fileName}</stringProp>
                     <stringProp name="Argument.metadata">=</stringProp>
                   </elementProp>
                 </collectionProp>
@@ -134,9 +134,9 @@
               <elementProp name="HTTPsampler.Files" elementType="HTTPFileArgs">
                 <collectionProp name="HTTPFileArgs.files">
                   <elementProp name="" elementType="HTTPFileArg">
-                    <stringProp name="File.path">${UPLOAD_FILE}</stringProp>
+                    <stringProp name="File.path">${filePath}</stringProp>
                     <stringProp name="File.paramname">file</stringProp>
-                    <stringProp name="File.mimetype">text/markdown</stringProp>
+                    <stringProp name="File.mimetype">${mimeType}</stringProp>
                   </elementProp>
                 </collectionProp>
               </elementProp>

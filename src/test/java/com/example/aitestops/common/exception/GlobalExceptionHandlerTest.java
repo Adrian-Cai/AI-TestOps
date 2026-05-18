@@ -31,6 +31,8 @@ class GlobalExceptionHandlerTest {
     void missingStaticResourceShouldReturnNotFound() throws Exception {
         mockMvc.perform(get("/missing-resource.ico"))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value(404));
+                .andExpect(header().exists("X-Trace-Id"))
+                .andExpect(jsonPath("$.code").value(404))
+                .andExpect(jsonPath("$.traceId").isNotEmpty());
     }
 }
