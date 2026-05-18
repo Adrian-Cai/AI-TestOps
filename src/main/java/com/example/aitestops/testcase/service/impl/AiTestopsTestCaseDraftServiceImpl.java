@@ -444,9 +444,8 @@ public class AiTestopsTestCaseDraftServiceImpl
     private String findBestArrayCandidate(ObjectNode root) {
         String bestKey = null;
         int bestSize = 0;
-        var fields = root.fields();
-        while (fields.hasNext()) {
-            var entry = fields.next();
+        var fields = root.properties();
+        for (var entry : fields) {
             if (entry.getValue().isArray() && entry.getValue().size() > bestSize) {
                 bestSize = entry.getValue().size();
                 bestKey = entry.getKey();
@@ -705,19 +704,6 @@ public class AiTestopsTestCaseDraftServiceImpl
             JsonNode node = objectMapper.readTree(json);
             if (!node.isArray()) {
                 throw new BusinessException(ErrorCode.BAD_REQUEST, fieldName + " 必须是 JSON 数组");
-            }
-        } catch (BusinessException ex) {
-            throw ex;
-        } catch (Exception ex) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, fieldName + " 不是合法 JSON: " + ex.getMessage(), ex);
-        }
-    }
-
-    private void validateNonEmptyJsonArray(String json, String fieldName) {
-        try {
-            JsonNode node = objectMapper.readTree(json);
-            if (!node.isArray() || node.isEmpty()) {
-                throw new BusinessException(ErrorCode.BAD_REQUEST, fieldName + " 必须是非空 JSON 数组");
             }
         } catch (BusinessException ex) {
             throw ex;

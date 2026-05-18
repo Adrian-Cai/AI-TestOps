@@ -89,8 +89,8 @@ public class DiffCoverageMatcher {
         if (bestScore.compareTo(PARTIAL_THRESHOLD) >= 0) {
             return new CoverageMatchResult(DiffCoverageStatusEnum.PARTIAL_COVERED.name(), "已有用例覆盖部分风险关键词，仍需补充缺失场景", relations);
         }
-        return new CoverageMatchResult(DiffCoverageStatusEnum.NEED_CONFIRM.name(),
-                "未找到明显关键词匹配，已关联同一需求来源的正式测试用例，请人工确认覆盖范围",
+        return new CoverageMatchResult(DiffCoverageStatusEnum.PARTIAL_COVERED.name(),
+                "未找到明显关键词匹配，已关联同一需求来源的正式测试用例，按部分覆盖处理，仍需补充缺失场景",
                 buildFallbackRelations(risk, cases));
     }
 
@@ -105,8 +105,8 @@ public class DiffCoverageMatcher {
                     rel.setRequirementExtractId(risk.getRequirementExtractId());
                     rel.setCaseSourceType("REQUIREMENT_GENERATED");
                     rel.setRelationType("SAME_SOURCE_CANDIDATE_CASE");
-                    rel.setCoverageJudgement(DiffCoverageStatusEnum.NEED_CONFIRM.name());
-                    rel.setJudgementReason("同一需求来源已有正式用例，关键词未明显命中，请人工确认是否覆盖该风险场景: " + testCase.getCaseId());
+                    rel.setCoverageJudgement("PARTIAL");
+                    rel.setJudgementReason("同一需求来源已有正式用例，关键词未明显命中，按部分覆盖候选关联，仍需补充或人工确认缺失场景: " + testCase.getCaseId());
                     rel.setSimilarityScore(BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP));
                     rel.setGeneratedFromAi(0);
                     rel.setCreatedAt(LocalDateTime.now());

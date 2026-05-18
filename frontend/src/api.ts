@@ -1,5 +1,10 @@
 import type {
   ApiResponse,
+  DiffAnalysisReportVO,
+  DiffAnalysisSourceVO,
+  DiffAnalysisTaskCreateRequest,
+  DiffAnalysisTaskVO,
+  DiffSupplementCaseVO,
   DocumentChunkVO,
   DocumentParseSummaryVO,
   DocumentVO,
@@ -124,5 +129,51 @@ export const api = {
     const query = new URLSearchParams();
     if (documentId) query.set("documentId", documentId);
     return `/api/ai-testops/export/testcases/excel${query.toString() ? `?${query}` : ""}`;
+  },
+  createDiffTask(input: DiffAnalysisTaskCreateRequest) {
+    return requestJson<DiffAnalysisTaskVO>("/api/ai-testops/diff-analysis/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input)
+    });
+  },
+  listDiffTasks(input: { documentId?: string; requirementExtractId?: string; status?: string; sourceBranch?: string; targetBranch?: string }) {
+    const query = new URLSearchParams();
+    if (input.documentId) query.set("documentId", input.documentId);
+    if (input.requirementExtractId) query.set("requirementExtractId", input.requirementExtractId);
+    if (input.status) query.set("status", input.status);
+    if (input.sourceBranch) query.set("sourceBranch", input.sourceBranch);
+    if (input.targetBranch) query.set("targetBranch", input.targetBranch);
+    const suffix = query.toString() ? `?${query}` : "";
+    return requestJson<DiffAnalysisTaskVO[]>(`/api/ai-testops/diff-analysis/tasks${suffix}`);
+  },
+  listDiffSources(limit?: number) {
+    const query = new URLSearchParams();
+    if (limit) query.set("limit", String(limit));
+    const suffix = query.toString() ? `?${query}` : "";
+    return requestJson<DiffAnalysisSourceVO[]>(`/api/ai-testops/diff-analysis/sources/recent${suffix}`);
+  },
+  listRepositoryBranches(repoUrl: string) {
+    const query = new URLSearchParams({ repoUrl });
+    return requestJson<string[]>(`/api/ai-testops/diff-analysis/repositories/branches?${query}`);
+  },
+  getDiffReport(taskId: number) {
+    return requestJson<DiffAnalysisReportVO>(`/api/ai-testops/diff-analysis/tasks/${encodeURIComponent(taskId)}/report`);
+  },
+  applyDiffRiskAction(
+    riskId: number,
+    input: { actionType: string; actionDesc?: string; operator: string; ignoreReason?: string; relatedCaseIds?: number[] }
+  ) {
+    return requestJson<void>(`/api/ai-testops/diff-analysis/risks/${encodeURIComponent(riskId)}/actions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input)
+    }).then(() => true);
+  },
+  generateDiffSupplementCases(riskId: number) {
+    return requestJson<DiffSupplementCaseVO>(
+      `/api/ai-testops/diff-analysis/risks/${encodeURIComponent(riskId)}/generate-supplement-cases`,
+      { method: "POST" }
+    );
   }
 };

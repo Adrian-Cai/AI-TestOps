@@ -145,3 +145,142 @@ export interface OperationLog {
   status: "success" | "error" | "info";
   detail?: string;
 }
+
+export interface DiffAnalysisOptions {
+  includeTestFiles?: boolean;
+  enableAiAnalysis?: boolean;
+  enableCoverageCheck?: boolean;
+  autoGenerateSupplementCases?: boolean;
+}
+
+export interface DiffAnalysisTaskCreateRequest {
+  documentId?: string;
+  requirementExtractId?: string;
+  repoUrl: string;
+  sourceBranch: string;
+  targetBranch?: string;
+  analysisOptions?: DiffAnalysisOptions;
+  createdBy?: string;
+}
+
+export interface DiffAnalysisTaskVO {
+  taskId: number;
+  taskCode?: string;
+  documentId?: string;
+  requirementExtractId?: string;
+  repoUrl?: string;
+  repoName?: string;
+  sourceBranch?: string;
+  targetBranch?: string;
+  status?: string;
+  failReason?: string;
+  changedFileCount?: number;
+  highRiskCount?: number;
+  mediumRiskCount?: number;
+  lowRiskCount?: number;
+  notCoveredRiskCount?: number;
+  mergeGateStatus?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface DiffAnalysisSourceVO {
+  documentId: string;
+  documentTitle?: string;
+  parseStatus?: string;
+  requirementExtractId?: string;
+  generationId?: string;
+  documentCreatedAt?: string;
+  requirementExtractCreatedAt?: string;
+}
+
+export interface DiffMergeGateReportVO {
+  reportId?: number;
+  taskId?: number;
+  reportCode?: string;
+  gateStatus?: string;
+  gateReason?: string;
+  changedFileCount?: number;
+  changedMethodCount?: number;
+  highRiskCount?: number;
+  mediumRiskCount?: number;
+  lowRiskCount?: number;
+  coveredRiskCount?: number;
+  partialCoveredRiskCount?: number;
+  notCoveredRiskCount?: number;
+  needConfirmRiskCount?: number;
+  blockedRiskCount?: number;
+  suggestedCaseCount?: number;
+  suggestedRegressionModules?: string;
+  reportSummary?: string;
+  createdAt?: string;
+}
+
+export interface DiffChangedFileVO {
+  changedFileId: number;
+  oldFilePath?: string;
+  newFilePath?: string;
+  changeType?: string;
+  language?: string;
+  fileRole?: string;
+  additions?: number;
+  deletions?: number;
+  changes?: number;
+  patch?: string;
+  patchSummary?: string;
+  testFile?: boolean;
+  initialRiskLevel?: string;
+  initialRiskReason?: string;
+}
+
+export interface DiffRiskCaseRelVO {
+  id?: number;
+  caseDbId?: number;
+  testCaseId?: string;
+  caseId?: string;
+  caseTitle?: string;
+  coverageJudgement?: string;
+  judgementReason?: string;
+  similarityScore?: number;
+}
+
+export interface DiffRiskItemVO {
+  riskId: number;
+  riskCode?: string;
+  riskTitle?: string;
+  riskLevel?: string;
+  riskCategory?: string;
+  sourceType?: string;
+  affectedModule?: string;
+  affectedScenarios?: string;
+  riskReason?: string;
+  testSuggestion?: string;
+  missingTestScenarios?: string;
+  coverageStatus?: string;
+  coverageReason?: string;
+  processStatus?: string;
+  mergeGateImpact?: string;
+  matchedCases?: DiffRiskCaseRelVO[];
+}
+
+export interface DiffAnalysisReportVO {
+  task: DiffAnalysisTaskVO;
+  report?: DiffMergeGateReportVO;
+  changedFiles: DiffChangedFileVO[];
+  riskList: DiffRiskItemVO[];
+}
+
+export interface DiffSupplementGeneratedCaseVO {
+  draftCaseId?: string;
+  caseId?: string;
+  caseTitle?: string;
+  priority?: string;
+  preconditionsJson?: string;
+  stepsJson?: string;
+  expectedResultsJson?: string;
+}
+
+export interface DiffSupplementCaseVO {
+  riskId: number;
+  generatedCases: DiffSupplementGeneratedCaseVO[];
+}
