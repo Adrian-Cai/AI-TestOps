@@ -8,6 +8,7 @@ import org.apache.tika.parser.AutoDetectParser;
 import org.apache.tika.parser.ParseContext;
 import org.junit.jupiter.api.Test;
 import org.xml.sax.ContentHandler;
+import org.xml.sax.helpers.AttributesImpl;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -21,6 +22,8 @@ import static org.mockito.Mockito.mock;
 
 class TikaParseServiceImplTest {
 
+    private static final String XHTML_URI = "http://www.w3.org/1999/xhtml";
+
     @Test
     void parseShouldReturnRawTextAndNormalizedMetadata() throws Exception {
         AutoDetectParser parser = mock(AutoDetectParser.class);
@@ -31,7 +34,14 @@ class TikaParseServiceImplTest {
             metadata.add("multi", "first");
             metadata.add("multi", "second");
             char[] content = "hello tika".toCharArray();
+            AttributesImpl attributes = new AttributesImpl();
+            handler.startDocument();
+            handler.startElement(XHTML_URI, "html", "html", attributes);
+            handler.startElement(XHTML_URI, "body", "body", attributes);
             handler.characters(content, 0, content.length);
+            handler.endElement(XHTML_URI, "body", "body");
+            handler.endElement(XHTML_URI, "html", "html");
+            handler.endDocument();
             return null;
         }).when(parser).parse(any(), any(ContentHandler.class), any(Metadata.class), any(ParseContext.class));
         Path tempFile = Files.createTempFile("ai-testops", ".txt");
