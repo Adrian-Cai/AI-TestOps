@@ -9,7 +9,7 @@ pipeline {
         )
         choice(
             name: 'AI_PROVIDER',
-            choices: ['OPENAI_COMPATIBLEE'],
+            choices: ['MOCK', 'OPENAI_COMPATIBLE'],
             description: 'MOCK 只生成本地规则报告；OPENAI_COMPATIBLE 调用兼容 /v1/chat/completions 的模型服务'
         )
         string(
@@ -293,7 +293,14 @@ pipeline {
         stage('AI Risk Analysis') {
             steps {
                 script {
-                    def aiProvider = params.AI_PROVIDER?.trim() ?: 'MOCK'
+                    def aiProvider = (params.AI_PROVIDER?.trim() ?: 'MOCK').toUpperCase()
+                    if (aiProvider == 'OPENAI_COMPATIBLEE') {
+                        echo "AI_PROVIDER=OPENAI_COMPATIBLEE is deprecated; treating it as OPENAI_COMPATIBLE."
+                        aiProvider = 'OPENAI_COMPATIBLE'
+                    }
+                    if (!['MOCK', 'OPENAI_COMPATIBLE'].contains(aiProvider)) {
+                        error "Unsupported AI_PROVIDER: ${aiProvider}. Expected MOCK or OPENAI_COMPATIBLE."
+                    }
                     def aiApiBase = params.AI_API_BASE?.trim() ?: 'https://api.openai.com'
                     def aiModelName = params.AI_MODEL_NAME?.trim() ?: 'gpt-4o-mini'
                     def aiCredentialsId = params.AI_CREDENTIALS_ID?.trim() ?: 'AI_API_KEY'
@@ -322,8 +329,23 @@ pipeline {
                                 sh analyzerCommand
                             }
                         } else {
-                            withCredentials([string(credentialsId: aiCredentialsId, variable: 'AI_API_KEY')]) {
-                                withEnv(aiEnv) {
+                            try {
+                                withCredentials([string(credentialsId: aiCredentialsId, variable: 'AI_API_KEY')]) {
+                                    withEnv(aiEnv) {
+                                        sh analyzerCommand
+                                    }
+                                }
+                            } catch (err) {
+                                def errorMessage = err.getMessage()
+                                if (!errorMessage?.contains('Could not find credentials entry') || params.FAIL_ON_AI_ERROR) {
+                                    throw err
+                                }
+
+                                echo "Jenkins credential '${aiCredentialsId}' was not found. Falling back to MOCK AI risk analysis because FAIL_ON_AI_ERROR=false."
+                                def fallbackAiEnv = aiEnv.collect {
+                                    it.startsWith('AI_PROVIDER=') ? 'AI_PROVIDER=MOCK' : it
+                                }
+                                withEnv(fallbackAiEnv) {
                                     sh analyzerCommand
                                 }
                             }
