@@ -20,16 +20,19 @@ class CoverageDashboardTest(unittest.TestCase):
                 """<?xml version="1.0" encoding="UTF-8"?>
                 <report name="demo">
                   <package name="com/example/aitestops/diff/gate">
-                    <class name="DiffMergeGateCalculator">
+                    <class name="com/example/aitestops/diff/gate/DiffMergeGateCalculator">
                       <counter type="LINE" missed="6" covered="4"/>
                       <counter type="BRANCH" missed="2" covered="2"/>
                       <counter type="METHOD" missed="0" covered="1"/>
                     </class>
                   </package>
                   <package name="com/example/aitestops/testcase/entity">
-                    <class name="AiTestopsTestCase">
+                    <class name="com/example/aitestops/testcase/entity/AiTestopsTestCase">
                       <counter type="LINE" missed="1" covered="0"/>
                     </class>
+                  </package>
+                  <package name="com/example/aitestops/testcase/service">
+                    <class name="com/example/aitestops/testcase/service/AiTestopsTestCaseService"/>
                   </package>
                   <counter type="LINE" missed="7" covered="4"/>
                   <counter type="BRANCH" missed="2" covered="2"/>
@@ -43,8 +46,12 @@ class CoverageDashboardTest(unittest.TestCase):
 
         by_name = {item.name: item for item in report.classes}
         self.assertEqual(0.3636, report.line.ratio)
+        self.assertIn("com/example/aitestops/diff/gate/DiffMergeGateCalculator", by_name)
+        self.assertNotIn("com/example/aitestops/diff/gate/com/example/aitestops/diff/gate/DiffMergeGateCalculator", by_name)
         self.assertEqual("must", by_name["com/example/aitestops/diff/gate/DiffMergeGateCalculator"].priority)
         self.assertEqual("exempt", by_name["com/example/aitestops/testcase/entity/AiTestopsTestCase"].priority)
+        self.assertEqual("exempt", by_name["com/example/aitestops/testcase/service/AiTestopsTestCaseService"].priority)
+        self.assertIn("没有可执行行", by_name["com/example/aitestops/testcase/service/AiTestopsTestCaseService"].reason)
 
     def test_generate_dashboard_writes_priority_sections(self):
         with tempfile.TemporaryDirectory() as temp_dir:
