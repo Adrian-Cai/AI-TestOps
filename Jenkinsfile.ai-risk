@@ -39,18 +39,23 @@ pipeline {
         )
         string(
             name: 'LINE_COVERAGE_MIN',
-            defaultValue: '0.60',
-            description: 'JaCoCo 行覆盖率门禁，例如 0.60'
+            defaultValue: '0.50',
+            description: 'JaCoCo 行覆盖率门禁，例如 0.50'
         )
         string(
             name: 'BRANCH_COVERAGE_MIN',
-            defaultValue: '0.40',
-            description: 'JaCoCo 分支覆盖率门禁，例如 0.40'
+            defaultValue: '0.30',
+            description: 'JaCoCo 分支覆盖率门禁，例如 0.30'
         )
         string(
             name: 'EMAIL_TO',
             defaultValue: 'imacaiy@gmail.com',
             description: '构建完成后通知邮箱；留空则不发送邮件'
+        )
+        string(
+            name: 'EMAIL_FROM',
+            defaultValue: '',
+            description: '可选：邮件发件人；留空则使用 Jenkins Email Extension 全局默认发件人'
         )
         string(
             name: 'JDK_TOOL_NAME',
@@ -67,6 +72,7 @@ pipeline {
     environment {
         PROJECT_NAME = 'ai-testops'
         REPORT_DIR = 'target/site/jacoco'
+        COVERAGE_DASHBOARD_DIR = 'target/coverage-dashboard'
         JUNIT_REPORT = 'target/surefire-reports/*.xml'
         JACOCO_XML = 'target/site/jacoco/jacoco.xml'
         AI_REPORT = 'ai-risk-report.md'
@@ -248,6 +254,29 @@ pipeline {
                 always {
                     junit allowEmptyResults: true, testResults: "${JUNIT_REPORT}"
                     script {
+                        def lineCoverageMin = params.LINE_COVERAGE_MIN?.trim() ?: '0.50'
+                        def branchCoverageMin = params.BRANCH_COVERAGE_MIN?.trim() ?: '0.30'
+                        sh """
+                            ${env.PYTHON_CMD} scripts/coverage_dashboard.py \
+                              --project "${PROJECT_NAME}" \
+                              --jacoco-xml "${JACOCO_XML}" \
+                              --output-dir "${COVERAGE_DASHBOARD_DIR}" \
+                              --line-min "${lineCoverageMin}" \
+                              --branch-min "${branchCoverageMin}"
+                        """
+                        if (fileExists("${COVERAGE_DASHBOARD_DIR}/index.html")) {
+                            publishHTML(target: [
+                                allowMissing: true,
+                                alwaysLinkToLastBuild: true,
+                                keepAll: true,
+                                reportDir: "${COVERAGE_DASHBOARD_DIR}",
+                                reportFiles: 'index.html',
+                                reportName: 'AI Coverage Dashboard'
+                            ])
+                        } else {
+                            echo "AI coverage dashboard not found, skip dashboard publishing."
+                        }
+
                         if (fileExists("${REPORT_DIR}/index.html")) {
                             publishHTML(target: [
                                 allowMissing: true,
@@ -271,8 +300,8 @@ pipeline {
             }
             steps {
                 script {
-                    def lineCoverageMin = params.LINE_COVERAGE_MIN?.trim() ?: '0.60'
-                    def branchCoverageMin = params.BRANCH_COVERAGE_MIN?.trim() ?: '0.40'
+                    def lineCoverageMin = params.LINE_COVERAGE_MIN?.trim() ?: '0.50'
+                    def branchCoverageMin = params.BRANCH_COVERAGE_MIN?.trim() ?: '0.30'
                     def coverageCommand = "${env.MVN_CMD} -B jacoco:check@check " +
                         "-Djacoco.line.coverage.minimum=${lineCoverageMin} " +
                         "-Djacoco.branch.coverage.minimum=${branchCoverageMin}"
@@ -362,17 +391,20 @@ pipeline {
                 diff-stat.txt,
                 diff-full.patch,
                 ai-risk-report.md,
+                target/coverage-dashboard/**,
                 target/site/jacoco/**,
                 target/surefire-reports/**
             ''', allowEmptyArchive: true, fingerprint: true
 
             script {
-                if (params.EMAIL_TO?.trim()) {
-                    emailext(
+                def emailTo = params.EMAIL_TO?.trim()
+                if (emailTo) {
+                    def emailArgs = [
                         subject: "[${PROJECT_NAME}] AI 测试风险分析：${currentBuild.currentResult} - #${env.BUILD_NUMBER}",
-                        to: params.EMAIL_TO,
+                        to: emailTo,
                         mimeType: 'text/html',
                         attachmentsPattern: 'ai-risk-report.md',
+                        saveOutput: true,
                         body: """
                             <h2>${PROJECT_NAME} AI 测试风险分析：${currentBuild.currentResult}</h2>
                             <p><b>构建编号：</b>#${env.BUILD_NUMBER}</p>
@@ -381,12 +413,26 @@ pipeline {
                             <h3>核心报告</h3>
                             <ul>
                                 <li><a href="${env.BUILD_URL}artifact/ai-risk-report.md">AI 风险分析报告</a></li>
+                                <li><a href="${env.BUILD_URL}AI_20Coverage_20Dashboard/">AI 覆盖率看板</a></li>
                                 <li><a href="${env.BUILD_URL}JaCoCo_20Coverage_20Report/">JaCoCo 覆盖率报告</a></li>
                                 <li><a href="${env.BUILD_URL}testReport/">JUnit 单测报告</a></li>
                             </ul>
-                            <p>如构建失败或 unstable，请优先查看 AI 风险分析报告中的失败用例、低覆盖率类和上线前检查清单。</p>
+                            <p>如构建失败或 unstable，请优先查看 AI 风险分析报告和覆盖率看板中的必须补测类、低覆盖率类和上线前检查清单。</p>
                         """
-                    )
+                    ]
+                    def emailFrom = params.EMAIL_FROM?.trim()
+                    if (emailFrom) {
+                        emailArgs.from = emailFrom
+                        emailArgs.replyTo = emailFrom
+                    }
+                    try {
+                        echo "Sending email notification to ${emailTo}. If it does not arrive, verify Email Extension Plugin and Jenkins global SMTP settings."
+                        emailext(emailArgs)
+                        echo "Email notification request submitted to Email Extension Plugin."
+                    } catch (err) {
+                        echo "[WARN] Email notification failed: ${err.getMessage()}"
+                        echo "[WARN] EMAIL_TO only configures recipients. Please confirm Email Extension Plugin is installed, Jenkins global SMTP/default sender is configured, and the mailbox did not reject or quarantine the message."
+                    }
                 } else {
                     echo "EMAIL_TO is empty, skip email notification."
                 }

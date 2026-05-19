@@ -24,7 +24,7 @@ public class DiffFileClassifier {
         String fileName = lower.contains("/") ? lower.substring(lower.lastIndexOf('/') + 1) : lower;
         String dirPath = lower.contains("/") ? lower.substring(0, lower.lastIndexOf('/')) : "";
         if (dirPath.contains("/test/") || dirPath.contains("/tests/") || dirPath.endsWith("/test")
-                || fileName.contains("test") && (fileName.endsWith(".java") || fileName.endsWith(".ts") || fileName.endsWith(".js"))) {
+                || isTestLikeFileName(fileName)) {
             return DiffFileRoleEnum.TEST;
         }
         if (fileName.contains("auth") || fileName.contains("security") || fileName.contains("permission")
@@ -46,5 +46,11 @@ public class DiffFileClassifier {
 
     public boolean isTestFile(String path) {
         return classify(path) == DiffFileRoleEnum.TEST;
+    }
+
+    private boolean isTestLikeFileName(String fileName) {
+        boolean testExtension = fileName.endsWith(".java") || fileName.endsWith(".ts") || fileName.endsWith(".tsx")
+                || fileName.endsWith(".js") || fileName.endsWith(".jsx");
+        return testExtension && (fileName.contains("test") || fileName.contains(".spec."));
     }
 }

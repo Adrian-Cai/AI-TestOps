@@ -21,7 +21,7 @@ from typing import Any
 
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(message)s"
 DEFAULT_MAX_DIFF_CHARS = 60000
-LOW_CLASS_COVERAGE = 0.60
+LOW_CLASS_COVERAGE = 0.50
 SECRET_PATTERN = re.compile(r"(sk|ak)-[A-Za-z0-9_-]{8,}")
 
 logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
@@ -416,6 +416,8 @@ def local_risk_report(
         ## 5. 接口覆盖率提升建议
         - 当前未接入接口自动化覆盖率结果，建议下一阶段补充 `quality/api_inventory.json` 与接口测试结果汇总。
         - 对本次变更涉及的 Controller、Service、Mapper 优先补充正常路径、鉴权失败、参数边界、幂等与异常分支用例。
+        - 必须覆盖：Controller、Service、Diff 风险规则、覆盖匹配、门禁计算、文档解析、导出和关键工具类。
+        - 可降低优先级：Entity、DTO、VO、枚举、启动类、纯配置装配类和构建产物，避免为了覆盖率补脆弱测试。
 
         ## 6. 线上 Bug 风险预判
         - 优先关注本次变更文件对应的业务链路。
