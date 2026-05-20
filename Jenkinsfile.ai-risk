@@ -264,20 +264,6 @@ pipeline {
                               --line-min "${lineCoverageMin}" \
                               --branch-min "${branchCoverageMin}"
                         """
-                        if (fileExists("${COVERAGE_DASHBOARD_DIR}/index.html")) {
-                            publishHTML(target: [
-                                allowMissing: true,
-                                alwaysLinkToLastBuild: true,
-                                keepAll: true,
-                                reportDir: "${COVERAGE_DASHBOARD_DIR}",
-                                reportFiles: 'index.html',
-                                reportName: 'AI Coverage Dashboard',
-                                includes: '**/*'
-                            ])
-                        } else {
-                            echo "AI coverage dashboard not found, skip dashboard publishing."
-                        }
-
                         if (fileExists("${REPORT_DIR}/index.html")) {
                             publishHTML(target: [
                                 allowMissing: true,
@@ -380,6 +366,31 @@ pipeline {
                                 }
                             }
                         }
+                    }
+
+                    def lineCoverageMin = params.LINE_COVERAGE_MIN?.trim() ?: '0.50'
+                    def branchCoverageMin = params.BRANCH_COVERAGE_MIN?.trim() ?: '0.30'
+                    sh """
+                        ${env.PYTHON_CMD} scripts/coverage_dashboard.py \
+                          --project "${PROJECT_NAME}" \
+                          --jacoco-xml "${JACOCO_XML}" \
+                          --output-dir "${COVERAGE_DASHBOARD_DIR}" \
+                          --line-min "${lineCoverageMin}" \
+                          --branch-min "${branchCoverageMin}" \
+                          --ai-report "${AI_REPORT}"
+                    """
+                    if (fileExists("${COVERAGE_DASHBOARD_DIR}/index.html")) {
+                        publishHTML(target: [
+                            allowMissing: true,
+                            alwaysLinkToLastBuild: true,
+                            keepAll: true,
+                            reportDir: "${COVERAGE_DASHBOARD_DIR}",
+                            reportFiles: 'index.html',
+                            reportName: 'AI Coverage Dashboard',
+                            includes: '**/*'
+                        ])
+                    } else {
+                        echo "AI coverage dashboard not found, skip dashboard publishing."
                     }
                 }
             }

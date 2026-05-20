@@ -89,6 +89,53 @@ class CoverageDashboardTest(unittest.TestCase):
         self.assertTrue(css_exists)
         self.assertIn("覆盖匹配会影响补测判断", content)
 
+    def test_generate_dashboard_embeds_ai_report_summary(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            jacoco_file = Path(temp_dir) / "jacoco.xml"
+            ai_report = Path(temp_dir) / "ai-risk-report.md"
+            output_dir = Path(temp_dir) / "dashboard"
+            jacoco_file.write_text(
+                """<?xml version="1.0" encoding="UTF-8"?>
+                <report name="demo">
+                  <package name="com/example/aitestops/ai/controller">
+                    <class name="AiHealthController">
+                      <counter type="LINE" missed="5" covered="5"/>
+                    </class>
+                  </package>
+                  <counter type="LINE" missed="5" covered="5"/>
+                </report>
+                """,
+                encoding="utf-8",
+            )
+            ai_report.write_text(
+                """# AI 上线风险分析报告
+
+## 1. 结论摘要
+- 本次变更风险等级：中
+- 是否建议上线：谨慎上线
+
+## 5. 接口覆盖率提升建议
+- 建议补充健康检查失败、认证失败和参数边界场景。
+""",
+                encoding="utf-8",
+            )
+            report = coverage_dashboard.parse_jacoco_xml(str(jacoco_file), "demo")
+
+            html_path = coverage_dashboard.generate_dashboard(
+                report,
+                str(output_dir),
+                0.5,
+                0.3,
+                ai_report=str(ai_report),
+            )
+
+            content = html_path.read_text(encoding="utf-8")
+
+        self.assertIn("AI 风险分析建议", content)
+        self.assertIn("谨慎上线", content)
+        self.assertIn("健康检查失败", content)
+        self.assertIn("../artifact/ai-risk-report.md", content)
+
     def test_missing_dashboard_explains_absent_jacoco_xml(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             output_dir = Path(temp_dir) / "dashboard"

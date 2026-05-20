@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import html
+import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +15,8 @@ from typing import Iterable
 
 
 DASHBOARD_CSS_FILE = "dashboard.css"
+AI_REPORT_HREF = "../artifact/ai-risk-report.md"
+AI_REPORT_MAX_LINES = 80
 
 MISSING_DASHBOARD_CSS = """body { margin: 0; font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif; background: #f6f8fb; color: #172033; }
 main { max-width: 960px; margin: 72px auto; padding: 0 24px; }
@@ -21,6 +24,15 @@ main { max-width: 960px; margin: 72px auto; padding: 0 24px; }
 h1 { margin: 0 0 12px; font-size: 28px; }
 p { line-height: 1.75; }
 code { background: #eef3f8; padding: 2px 6px; border-radius: 4px; }
+.panel + .panel { margin-top: 16px; }
+.section-lead { color: #667085; line-height: 1.7; }
+.ai-summary { display: grid; gap: 10px; }
+.ai-summary h3 { margin: 6px 0 0; font-size: 16px; }
+.ai-summary ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.ai-summary li { line-height: 1.65; }
+.ai-note { padding: 10px 12px; border-left: 3px solid #0f766e; background: #ecfdf5; color: #24524d; }
+.ai-link { color: #2563eb; font-weight: 700; text-decoration: none; }
+.ai-link:hover { text-decoration: underline; }
 """
 
 DASHBOARD_CSS = """:root {
@@ -71,6 +83,15 @@ code { word-break: break-all; color: #1f2937; background: #f3f6fa; padding: 2px 
 .strategy p { margin: 0; color: var(--muted); line-height: 1.65; }
 .muted { color: var(--muted); }
 .footnote { color: var(--muted); font-size: 12px; line-height: 1.7; }
+.ai-panel { border-color: #b8d4ef; }
+.ai-summary { display: grid; gap: 10px; }
+.ai-summary h3 { margin: 6px 0 0; font-size: 16px; }
+.ai-summary p { margin: 0; color: var(--muted); line-height: 1.7; }
+.ai-summary ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.ai-summary li { line-height: 1.65; }
+.ai-note { padding: 10px 12px; border-left: 3px solid var(--cyan); background: #ecfdf5; color: #24524d !important; }
+.ai-link { color: var(--blue); font-weight: 700; text-decoration: none; }
+.ai-link:hover { text-decoration: underline; }
 @media (max-width: 920px) {
   .grid, .strategy { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   table { min-width: 760px; }
@@ -308,11 +329,110 @@ def package_table_rows(classes: Iterable[CoverageClass], line_min: float) -> str
     return "\n".join(rows) or '<tr><td colspan="5" class="muted">暂无数据</td></tr>'
 
 
+def inline_markdown(text: str) -> str:
+    parts = re.split(r"(`[^`]+`)", text)
+    rendered: list[str] = []
+    for part in parts:
+        if len(part) >= 2 and part.startswith("`") and part.endswith("`"):
+            rendered.append(f"<code>{html.escape(part[1:-1])}</code>")
+        else:
+            rendered.append(html.escape(part))
+    return "".join(rendered)
+
+
+def read_ai_report_excerpt(ai_report: str | None) -> list[str]:
+    if not ai_report:
+        return []
+    path = Path(ai_report)
+    if not path.exists():
+        return []
+
+    lines: list[str] = []
+    in_code_block = False
+    for raw_line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        line = raw_line.strip()
+        if line.startswith("```"):
+            in_code_block = not in_code_block
+            continue
+        if in_code_block:
+            continue
+        if not line and (not lines or not lines[-1]):
+            continue
+        lines.append(line)
+        if sum(1 for item in lines if item) >= AI_REPORT_MAX_LINES:
+            break
+    return lines
+
+
+def markdown_excerpt_to_html(lines: list[str]) -> str:
+    if not lines:
+        return ""
+
+    blocks: list[str] = []
+    in_list = False
+
+    def close_list() -> None:
+        nonlocal in_list
+        if in_list:
+            blocks.append("</ul>")
+            in_list = False
+
+    for line in lines:
+        if not line:
+            close_list()
+            continue
+        if line.startswith("#"):
+            close_list()
+            title = line.lstrip("#").strip()
+            if title:
+                blocks.append(f"<h3>{html.escape(title)}</h3>")
+            continue
+        if line.startswith(">"):
+            close_list()
+            note = line.lstrip(">").strip()
+            if note:
+                blocks.append(f'<p class="ai-note">{inline_markdown(note)}</p>')
+            continue
+        if line.startswith("- "):
+            if not in_list:
+                blocks.append("<ul>")
+                in_list = True
+            blocks.append(f"<li>{inline_markdown(line[2:].strip())}</li>")
+            continue
+        close_list()
+        blocks.append(f"<p>{inline_markdown(line)}</p>")
+
+    close_list()
+    return "\n".join(blocks)
+
+
+def ai_report_section(ai_report: str | None, class_name: str = "card ai-panel") -> str:
+    excerpt = read_ai_report_excerpt(ai_report)
+    if not excerpt:
+        summary = (
+            '<p class="muted">尚未读取到 <code>ai-risk-report.md</code>。'
+            "当前页面只展示 JaCoCo 覆盖率和本地规则化补测建议；"
+            "请确认 Jenkins 的 AI Risk Analysis 阶段已运行并生成报告。</p>"
+        )
+    else:
+        summary = markdown_excerpt_to_html(excerpt)
+
+    return f"""
+    <section class="{class_name}">
+      <h2>AI 风险分析建议</h2>
+      <p class="section-lead">来自 Jenkins <code>AI Risk Analysis</code> 阶段的报告摘要。完整 Markdown 报告见 <a class="ai-link" href="{AI_REPORT_HREF}">ai-risk-report.md</a>。</p>
+      <div class="ai-summary">
+        {summary}
+      </div>
+    </section>
+"""
+
+
 def write_stylesheet(output_dir: Path, css: str) -> None:
     (output_dir / DASHBOARD_CSS_FILE).write_text(css, encoding="utf-8")
 
 
-def write_missing_dashboard(project: str, jacoco_xml: str, output_dir: str) -> Path:
+def write_missing_dashboard(project: str, jacoco_xml: str, output_dir: str, ai_report: str | None = None) -> Path:
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
     write_stylesheet(output, MISSING_DASHBOARD_CSS)
@@ -332,6 +452,7 @@ def write_missing_dashboard(project: str, jacoco_xml: str, output_dir: str) -> P
       <p>未找到 JaCoCo XML：<code>{html.escape(jacoco_xml)}</code>。</p>
       <p>通常是单测阶段没有完成、JaCoCo 插件未生成报告，或报告路径配置不一致。请先查看 Jenkins 单测日志和 <code>target/surefire-reports</code>。</p>
     </section>
+{ai_report_section(ai_report, "panel ai-panel")}
   </main>
 </body>
 </html>
@@ -341,7 +462,7 @@ def write_missing_dashboard(project: str, jacoco_xml: str, output_dir: str) -> P
     return html_path
 
 
-def generate_dashboard(report: CoverageReport, output_dir: str, line_min: float, branch_min: float) -> Path:
+def generate_dashboard(report: CoverageReport, output_dir: str, line_min: float, branch_min: float, ai_report: str | None = None) -> Path:
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
     write_stylesheet(output, DASHBOARD_CSS)
@@ -380,6 +501,7 @@ def generate_dashboard(report: CoverageReport, output_dir: str, line_min: float,
       <article class="card kpi"><span>方法覆盖率</span><strong>{percent(report.method.ratio)}</strong><small>用于辅助判断覆盖广度</small></article>
       <article class="card kpi"><span>必须覆盖缺口</span><strong class="metric {status_for(1 - min(1, len(must_gaps) / max(1, must_count)), 1)}">{len(must_gaps)}</strong><small>必须覆盖类总数 {must_count}，低优先级类 {exempt_count}</small></article>
     </div>
+{ai_report_section(ai_report)}
 
     <section class="card">
       <h2>必须优先补测</h2>
@@ -447,16 +569,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", required=True, help="Directory where index.html will be written")
     parser.add_argument("--line-min", type=float, default=0.50, help="Line coverage target")
     parser.add_argument("--branch-min", type=float, default=0.30, help="Branch coverage target")
+    parser.add_argument("--ai-report", default=None, help="Optional AI risk report markdown path to summarize in the dashboard")
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
     if not Path(args.jacoco_xml).exists():
-        write_missing_dashboard(args.project, args.jacoco_xml, args.output_dir)
+        write_missing_dashboard(args.project, args.jacoco_xml, args.output_dir, args.ai_report)
         return 0
     report = parse_jacoco_xml(args.jacoco_xml, args.project)
-    generate_dashboard(report, args.output_dir, args.line_min, args.branch_min)
+    generate_dashboard(report, args.output_dir, args.line_min, args.branch_min, args.ai_report)
     return 0
 
 
