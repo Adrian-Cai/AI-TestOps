@@ -271,7 +271,8 @@ pipeline {
                                 keepAll: true,
                                 reportDir: "${COVERAGE_DASHBOARD_DIR}",
                                 reportFiles: 'index.html',
-                                reportName: 'AI Coverage Dashboard'
+                                reportName: 'AI Coverage Dashboard',
+                                includes: '**/*'
                             ])
                         } else {
                             echo "AI coverage dashboard not found, skip dashboard publishing."

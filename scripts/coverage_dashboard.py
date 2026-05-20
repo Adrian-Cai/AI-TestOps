@@ -13,6 +13,77 @@ from pathlib import Path
 from typing import Iterable
 
 
+DASHBOARD_CSS_FILE = "dashboard.css"
+
+MISSING_DASHBOARD_CSS = """body { margin: 0; font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif; background: #f6f8fb; color: #172033; }
+main { max-width: 960px; margin: 72px auto; padding: 0 24px; }
+.panel { background: white; border: 1px solid #dbe3ef; border-radius: 8px; padding: 28px; box-shadow: 0 12px 36px rgba(21, 32, 52, .08); }
+h1 { margin: 0 0 12px; font-size: 28px; }
+p { line-height: 1.75; }
+code { background: #eef3f8; padding: 2px 6px; border-radius: 4px; }
+"""
+
+DASHBOARD_CSS = """:root {
+  --bg: #f4f7fb;
+  --surface: #ffffff;
+  --text: #172033;
+  --muted: #667085;
+  --border: #dbe3ef;
+  --blue: #2563eb;
+  --green: #138a4a;
+  --orange: #b76508;
+  --red: #c53030;
+  --cyan: #0f766e;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); }
+header { background: linear-gradient(135deg, #0f172a 0%, #184568 58%, #0f766e 100%); color: white; }
+.hero { max-width: 1220px; margin: 0 auto; padding: 34px 24px 30px; }
+.eyebrow { margin: 0 0 8px; color: #c7d2fe; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; }
+h1 { margin: 0; font-size: 32px; line-height: 1.2; letter-spacing: 0; }
+.hero p { max-width: 820px; margin: 12px 0 0; color: #dbeafe; line-height: 1.7; }
+main { max-width: 1220px; margin: 0 auto; padding: 24px; display: grid; gap: 18px; }
+.grid { display: grid; gap: 14px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 28px rgba(21, 32, 52, .06); }
+.kpi { padding: 18px; min-height: 128px; display: grid; align-content: space-between; }
+.kpi span { color: var(--muted); font-size: 13px; }
+.kpi strong { display: block; margin-top: 10px; font-size: 31px; line-height: 1; }
+.kpi small { color: var(--muted); }
+section.card { padding: 20px; }
+h2 { margin: 0 0 14px; font-size: 19px; letter-spacing: 0; }
+.section-lead { margin: -6px 0 16px; color: var(--muted); line-height: 1.7; }
+table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+th, td { padding: 11px 12px; border-bottom: 1px solid #edf1f6; text-align: left; vertical-align: top; font-size: 13px; }
+th { color: #344054; background: #f8fafc; font-weight: 700; }
+code { word-break: break-all; color: #1f2937; background: #f3f6fa; padding: 2px 5px; border-radius: 4px; }
+.badge { display: inline-flex; align-items: center; min-height: 24px; padding: 2px 8px; border-radius: 999px; font-weight: 700; font-size: 12px; }
+.badge.must { color: #9f1239; background: #fff1f2; }
+.badge.normal { color: #1d4ed8; background: #eff6ff; }
+.badge.exempt { color: #475467; background: #f2f4f7; }
+.metric { font-weight: 800; }
+.metric.good { color: var(--green); }
+.metric.warn { color: var(--orange); }
+.metric.bad { color: var(--red); }
+.metric.unknown { color: var(--muted); }
+.strategy { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.strategy div { border: 1px solid var(--border); border-radius: 8px; padding: 14px; background: #fbfdff; }
+.strategy h3 { margin: 0 0 8px; font-size: 15px; }
+.strategy p { margin: 0; color: var(--muted); line-height: 1.65; }
+.muted { color: var(--muted); }
+.footnote { color: var(--muted); font-size: 12px; line-height: 1.7; }
+@media (max-width: 920px) {
+  .grid, .strategy { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  table { min-width: 760px; }
+  .table-wrap { overflow-x: auto; }
+}
+@media (max-width: 560px) {
+  .grid, .strategy { grid-template-columns: 1fr; }
+  h1 { font-size: 25px; }
+  main, .hero { padding-left: 14px; padding-right: 14px; }
+}
+"""
+
+
 EXEMPT_HINTS: tuple[tuple[str, str], ...] = (
     ("/entity/", "Entity/POJO 主要是数据承载，优先用业务服务测试间接覆盖"),
     ("/vo/", "VO 主要是接口展示结构，除自定义转换逻辑外不单独追覆盖率"),
@@ -237,9 +308,14 @@ def package_table_rows(classes: Iterable[CoverageClass], line_min: float) -> str
     return "\n".join(rows) or '<tr><td colspan="5" class="muted">暂无数据</td></tr>'
 
 
+def write_stylesheet(output_dir: Path, css: str) -> None:
+    (output_dir / DASHBOARD_CSS_FILE).write_text(css, encoding="utf-8")
+
+
 def write_missing_dashboard(project: str, jacoco_xml: str, output_dir: str) -> Path:
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
+    write_stylesheet(output, MISSING_DASHBOARD_CSS)
     html_path = output / "index.html"
     html_path.write_text(
         f"""<!doctype html>
@@ -247,14 +323,7 @@ def write_missing_dashboard(project: str, jacoco_xml: str, output_dir: str) -> P
 <head>
   <meta charset="utf-8" />
   <title>{html.escape(project)} 覆盖率看板</title>
-  <style>
-    body {{ margin: 0; font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif; background: #f6f8fb; color: #172033; }}
-    main {{ max-width: 960px; margin: 72px auto; padding: 0 24px; }}
-    .panel {{ background: white; border: 1px solid #dbe3ef; border-radius: 8px; padding: 28px; box-shadow: 0 12px 36px rgba(21, 32, 52, .08); }}
-    h1 {{ margin: 0 0 12px; font-size: 28px; }}
-    p {{ line-height: 1.75; }}
-    code {{ background: #eef3f8; padding: 2px 6px; border-radius: 4px; }}
-  </style>
+  <link rel="stylesheet" href="{DASHBOARD_CSS_FILE}" />
 </head>
 <body>
   <main>
@@ -275,6 +344,7 @@ def write_missing_dashboard(project: str, jacoco_xml: str, output_dir: str) -> P
 def generate_dashboard(report: CoverageReport, output_dir: str, line_min: float, branch_min: float) -> Path:
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
+    write_stylesheet(output, DASHBOARD_CSS)
     html_path = output / "index.html"
 
     must_gaps = sorted(
@@ -293,66 +363,7 @@ def generate_dashboard(report: CoverageReport, output_dir: str, line_min: float,
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{html.escape(report.project)} 覆盖率看板</title>
-  <style>
-    :root {{
-      --bg: #f4f7fb;
-      --surface: #ffffff;
-      --text: #172033;
-      --muted: #667085;
-      --border: #dbe3ef;
-      --blue: #2563eb;
-      --green: #138a4a;
-      --orange: #b76508;
-      --red: #c53030;
-      --cyan: #0f766e;
-    }}
-    * {{ box-sizing: border-box; }}
-    body {{ margin: 0; font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); }}
-    header {{ background: linear-gradient(135deg, #0f172a 0%, #184568 58%, #0f766e 100%); color: white; }}
-    .hero {{ max-width: 1220px; margin: 0 auto; padding: 34px 24px 30px; }}
-    .eyebrow {{ margin: 0 0 8px; color: #c7d2fe; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; }}
-    h1 {{ margin: 0; font-size: 32px; line-height: 1.2; letter-spacing: 0; }}
-    .hero p {{ max-width: 820px; margin: 12px 0 0; color: #dbeafe; line-height: 1.7; }}
-    main {{ max-width: 1220px; margin: 0 auto; padding: 24px; display: grid; gap: 18px; }}
-    .grid {{ display: grid; gap: 14px; grid-template-columns: repeat(4, minmax(0, 1fr)); }}
-    .card {{ background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 28px rgba(21, 32, 52, .06); }}
-    .kpi {{ padding: 18px; min-height: 128px; display: grid; align-content: space-between; }}
-    .kpi span {{ color: var(--muted); font-size: 13px; }}
-    .kpi strong {{ display: block; margin-top: 10px; font-size: 31px; line-height: 1; }}
-    .kpi small {{ color: var(--muted); }}
-    section.card {{ padding: 20px; }}
-    h2 {{ margin: 0 0 14px; font-size: 19px; letter-spacing: 0; }}
-    .section-lead {{ margin: -6px 0 16px; color: var(--muted); line-height: 1.7; }}
-    table {{ width: 100%; border-collapse: collapse; table-layout: fixed; }}
-    th, td {{ padding: 11px 12px; border-bottom: 1px solid #edf1f6; text-align: left; vertical-align: top; font-size: 13px; }}
-    th {{ color: #344054; background: #f8fafc; font-weight: 700; }}
-    code {{ word-break: break-all; color: #1f2937; background: #f3f6fa; padding: 2px 5px; border-radius: 4px; }}
-    .badge {{ display: inline-flex; align-items: center; min-height: 24px; padding: 2px 8px; border-radius: 999px; font-weight: 700; font-size: 12px; }}
-    .badge.must {{ color: #9f1239; background: #fff1f2; }}
-    .badge.normal {{ color: #1d4ed8; background: #eff6ff; }}
-    .badge.exempt {{ color: #475467; background: #f2f4f7; }}
-    .metric {{ font-weight: 800; }}
-    .metric.good {{ color: var(--green); }}
-    .metric.warn {{ color: var(--orange); }}
-    .metric.bad {{ color: var(--red); }}
-    .metric.unknown {{ color: var(--muted); }}
-    .strategy {{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }}
-    .strategy div {{ border: 1px solid var(--border); border-radius: 8px; padding: 14px; background: #fbfdff; }}
-    .strategy h3 {{ margin: 0 0 8px; font-size: 15px; }}
-    .strategy p {{ margin: 0; color: var(--muted); line-height: 1.65; }}
-    .muted {{ color: var(--muted); }}
-    .footnote {{ color: var(--muted); font-size: 12px; line-height: 1.7; }}
-    @media (max-width: 920px) {{
-      .grid, .strategy {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }}
-      table {{ min-width: 760px; }}
-      .table-wrap {{ overflow-x: auto; }}
-    }}
-    @media (max-width: 560px) {{
-      .grid, .strategy {{ grid-template-columns: 1fr; }}
-      h1 {{ font-size: 25px; }}
-      main, .hero {{ padding-left: 14px; padding-right: 14px; }}
-    }}
-  </style>
+  <link rel="stylesheet" href="{DASHBOARD_CSS_FILE}" />
 </head>
 <body>
   <header>

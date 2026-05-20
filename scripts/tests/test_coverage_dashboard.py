@@ -79,23 +79,34 @@ class CoverageDashboardTest(unittest.TestCase):
             html_path = coverage_dashboard.generate_dashboard(report, str(output_dir), 0.5, 0.3)
 
             content = html_path.read_text(encoding="utf-8")
+            css_path = output_dir / "dashboard.css"
+            css_exists = css_path.exists()
         self.assertIn("代码覆盖率看板", content)
         self.assertIn("必须优先补测", content)
         self.assertIn("DiffCoverageMatcher", content)
+        self.assertIn('href="dashboard.css"', content)
+        self.assertNotIn("<style>", content)
+        self.assertTrue(css_exists)
         self.assertIn("覆盖匹配会影响补测判断", content)
 
     def test_missing_dashboard_explains_absent_jacoco_xml(self):
         with tempfile.TemporaryDirectory() as temp_dir:
+            output_dir = Path(temp_dir) / "dashboard"
             html_path = coverage_dashboard.write_missing_dashboard(
                 "demo",
                 "target/site/jacoco/jacoco.xml",
-                str(Path(temp_dir) / "dashboard"),
+                str(output_dir),
             )
 
             content = html_path.read_text(encoding="utf-8")
+            css_path = output_dir / "dashboard.css"
+            css_exists = css_path.exists()
 
         self.assertIn("覆盖率看板未生成", content)
         self.assertIn("target/site/jacoco/jacoco.xml", content)
+        self.assertIn('href="dashboard.css"', content)
+        self.assertNotIn("<style>", content)
+        self.assertTrue(css_exists)
 
 
 if __name__ == "__main__":
