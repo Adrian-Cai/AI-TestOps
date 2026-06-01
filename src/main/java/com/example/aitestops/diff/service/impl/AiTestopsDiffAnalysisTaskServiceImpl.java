@@ -254,7 +254,7 @@ public class AiTestopsDiffAnalysisTaskServiceImpl
             case "CONFIRM" -> DiffCoverageStatusEnum.NOT_COVERED.name().equals(risk.getCoverageStatus())
                     ? DiffRiskProcessStatusEnum.WAIT_CASE.name() : DiffRiskProcessStatusEnum.CONFIRMED.name();
             case "IGNORE" -> {
-                if (!StringUtils.hasText(request.getIgnoreReason()) && !StringUtils.hasText(request.getActionDesc())) {
+                if (request == null || (!StringUtils.hasText(request.getIgnoreReason()) && !StringUtils.hasText(request.getActionDesc()))) {
                     throw new BusinessException(ErrorCode.BAD_REQUEST, "忽略风险必须填写原因");
                 }
                 risk.setIgnoreReason(StringUtils.hasText(request.getIgnoreReason()) ? request.getIgnoreReason() : request.getActionDesc());

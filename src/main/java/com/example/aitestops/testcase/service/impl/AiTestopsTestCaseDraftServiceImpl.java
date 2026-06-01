@@ -62,6 +62,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -770,14 +771,14 @@ public class AiTestopsTestCaseDraftServiceImpl
 
         String suffix = draft.getDraftCaseId();
         int lastSeparator = suffix == null ? -1 : suffix.lastIndexOf('_');
-        if (lastSeparator >= 0 && lastSeparator + 1 < suffix.length()) {
+        if (suffix != null && lastSeparator >= 0 && lastSeparator + 1 < suffix.length()) {
             suffix = suffix.substring(lastSeparator + 1);
         }
         if (!StringUtils.hasText(suffix)) {
             suffix = String.valueOf(draft.getId());
         }
 
-        String base = truncate(caseId, Math.max(1, 64 - suffix.length() - 1));
+        String base = truncate(caseId, Math.max(1, 64 - Objects.requireNonNull(suffix).length() - 1));
         String candidate = base + "_" + suffix;
         int sequence = 1;
         while (formalCaseIdExists(candidate)) {
