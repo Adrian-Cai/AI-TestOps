@@ -553,13 +553,23 @@ function App() {
   };
 
   const batchApprove = async () => {
-    const ids = selectedDraftKeys.map(String);
-    if (!ids.length) {
+    if (!selectedDraftKeys.length) {
       messageApi.warning("请先选择待确认草稿。");
       return;
     }
-    const data = await runAction("batch-approve", "批量确认", () => api.batchApprove(ids));
+    const approvedSet = new Set(drafts.filter((d) => d.reviewStatus === "APPROVED").map((d) => d.draftCaseId));
+    const pendingIds = selectedDraftKeys.filter((key) => !approvedSet.has(String(key))).map(String);
+    const skippedCount = selectedDraftKeys.length - pendingIds.length;
+    if (!pendingIds.length) {
+      messageApi.warning("所选草稿均已确认，无需重复操作。");
+      return;
+    }
+    if (skippedCount > 0) {
+      messageApi.info(`已自动跳过 ${skippedCount} 条已确认草稿。`);
+    }
+    const data = await runAction("batch-approve", "批量确认", () => api.batchApprove(pendingIds));
     if (data) {
+      setSelectedDraftKeys([]);
       await refreshDrafts();
       await refreshCases();
     }

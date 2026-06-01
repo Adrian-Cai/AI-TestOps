@@ -234,13 +234,20 @@ public class AiTestopsTestCaseDraftServiceImpl
             throw new BusinessException(ErrorCode.BAD_REQUEST, "draftCaseIds 不能为空");
         }
         List<TestCaseVO> approved = new ArrayList<>();
+        int skipped = 0;
         for (String draftCaseId : request.getDraftCaseIds()) {
+            AiTestopsTestCaseDraft draft = requireDraft(draftCaseId);
+            if (ReviewStatusEnum.APPROVED.name().equals(draft.getReviewStatus())) {
+                log.info("批量确认跳过已确认草稿: draftCaseId={}", draftCaseId);
+                skipped++;
+                continue;
+            }
             TestCaseDraftReviewRequest reviewRequest = new TestCaseDraftReviewRequest();
             reviewRequest.setReviewer(request.getReviewer());
             reviewRequest.setReason("批量确认");
             approved.add(approveDraft(draftCaseId, reviewRequest));
         }
-        log.info("批量确认测试用例草稿完成: count={}", approved.size());
+        log.info("批量确认测试用例草稿完成: approved={}, skipped={}", approved.size(), skipped);
         return approved;
     }
 
