@@ -20,8 +20,8 @@ application-local.properties
 # Node.js / Frontend
 frontend/node_modules/
 frontend/dist/
+frontend/dist-local/
 frontend/.vite/
-
 # Environment & Secrets
 .env
 *.env.local
@@ -60,6 +60,7 @@ Desktop.ini
 .cursor/
 .cursorrules
 .openai-keys.json
+.qoder/
 
 # Lint / Misc
 .markdownlint.json
