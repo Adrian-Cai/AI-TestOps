@@ -1,0 +1,42 @@
+graph LR
+    User[测试人员或面试官] --> Web[React 工作台<br/>Ant Design + Vite]
+    Web --> Api[Spring Boot REST API<br/>Knife4j 接口文档]
+
+    subgraph Backend[后端核心模块]
+        Doc[文档模块<br/>文本录入 文件上传 解析状态]
+        Parser[解析模块<br/>Apache Tika 文本提取 元数据 分块]
+        Ai[AI 模块<br/>Prompt 编排 需求抽取 用例生成]
+        Case[用例模块<br/>草稿 正式用例 步骤]
+        Review[评审模块<br/>人工编辑 确认 驳回 记录]
+        Diff[Diff 分析模块<br/>代码变更 风险识别 补充用例]
+        Export[导出模块<br/>JSON Excel]
+    end
+
+    Api --> Doc
+    Doc --> Parser
+    Parser --> Ai
+    Ai --> Case
+    Case --> Review
+    Review --> Export
+    Diff --> Case
+
+    subgraph Storage[数据与文件存储]
+        MariaDB[(MariaDB<br/>业务表 Prompt 版本 生成记录)]
+        Uploads[本地上传目录<br/>data/uploads]
+    end
+
+    subgraph External[外部能力]
+        LLM[OpenAI 兼容大模型<br/>OpenAI Qwen DeepSeek]
+        Repo[Git 仓库<br/>源分支 目标分支 Diff]
+    end
+
+    Doc --> Uploads
+    Doc --> MariaDB
+    Parser --> MariaDB
+    Ai --> LLM
+    Ai --> MariaDB
+    Case --> MariaDB
+    Review --> MariaDB
+    Export --> MariaDB
+    Diff --> Repo
+    Diff --> MariaDB
