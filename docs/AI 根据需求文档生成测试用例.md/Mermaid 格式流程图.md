@@ -77,10 +77,7 @@ flowchart TD
 
 ---
 
-## 一步一步实现的版本
-
- **分阶段实现版 Mermaid**。
-这个版本更贴近“先做什么、后做什么”。
+## 分阶段实现版 Mermaid
 
 ```mermaid
 flowchart TD
