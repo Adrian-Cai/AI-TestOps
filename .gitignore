@@ -28,6 +28,7 @@ frontend/.vite/
 *.env.development
 *.env.test
 *.env.production
+.agents*
 
 # Logs & Data
 logs/

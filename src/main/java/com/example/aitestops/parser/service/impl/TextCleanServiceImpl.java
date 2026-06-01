@@ -14,8 +14,8 @@ public class TextCleanServiceImpl implements TextCleanService {
 
     @Override
     public String clean(String rawText) {
-        int beforeLength = rawText == null ? 0 : rawText.length();
-        if (!StringUtils.hasText(rawText)) {
+        if (rawText == null || !StringUtils.hasText(rawText)) {
+            int beforeLength = rawText == null ? 0 : rawText.length();
             log.info("文本清洗完成: beforeLength={}, afterLength=0", beforeLength);
             return "";
         }
