@@ -380,10 +380,23 @@ function App() {
   };
 
   const refreshCases = async () => {
-    const data = await runAction("cases", "查询正式用例", () =>
-      api.listCases({ documentId, requirementExtractId: requirementExtract?.requirementExtractId })
-    );
-    if (data) setCases(data);
+    const queryInfo = { documentId, requirementExtractId: requirementExtract?.requirementExtractId };
+    console.log("refreshCases query:", queryInfo);
+    
+    try {
+      const data = await runAction("cases", "查询正式用例", () =>
+        api.listCases(queryInfo)
+      );
+      
+      if (data !== null) {
+        console.log("refreshCases success:", data.length, "cases");
+        setCases(data);
+      } else {
+        console.log("refreshCases failed, data is null");
+      }
+    } catch (error) {
+      console.error("refreshCases error:", error);
+    }
   };
 
   const handleMenuClick: MenuProps["onClick"] = ({ key }) => {
@@ -521,10 +534,14 @@ function App() {
   };
 
   const approveDraft = async (draft: TestCaseDraftVO) => {
+    console.log("approveDraft starting:", draft.draftCaseId);
     const data = await runAction("approve-draft", "确认草稿", () => api.approveDraft(draft.draftCaseId));
+    console.log("approveDraft result:", data);
     if (data) {
+      console.log("approveDraft success, refreshing drafts and cases...");
       await refreshDrafts();
       await refreshCases();
+      console.log("refresh completed, cases count:", cases.length);
     }
   };
 
