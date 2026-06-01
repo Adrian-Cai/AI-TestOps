@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Objects;
 
 /**
  * 测试用例导出 REST API。
@@ -31,7 +32,7 @@ public class TestCaseExportController {
     public ResponseEntity<byte[]> exportJson(@RequestParam(required = false) String documentId,
                                              @RequestParam(required = false) String requirementExtractId) {
         return ResponseEntity.ok()
-                .contentType(MediaType.APPLICATION_JSON)
+                .contentType(Objects.requireNonNull(MediaType.APPLICATION_JSON))
                 .header(HttpHeaders.CONTENT_DISPOSITION, attachment("ai-testcases.json"))
                 .body(exportService.exportJson(documentId, requirementExtractId));
     }

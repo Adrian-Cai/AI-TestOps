@@ -99,7 +99,7 @@ public class AiTestopsDocumentServiceImpl
         log.info("文件上传开始: originalFilename={}, size={}", file == null ? null : file.getOriginalFilename(), file == null ? null : file.getSize());
         validateFile(file);
 
-        String originalFilename = FileNameUtil.cleanOriginalFilename(file.getOriginalFilename());
+        String originalFilename = FileNameUtil.cleanOriginalFilename(Objects.requireNonNull(file).getOriginalFilename());
         String extension = FileNameUtil.extension(originalFilename);
         String documentId = IdGenerator.documentId();
         String fileHash = null;
