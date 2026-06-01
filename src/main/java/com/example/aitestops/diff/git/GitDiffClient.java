@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.Objects;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -194,7 +195,7 @@ public class GitDiffClient {
     }
 
     private Path gitCacheDir(String repoUrl) {
-        String hash = DigestUtils.md5DigestAsHex(repoUrl.getBytes(StandardCharsets.UTF_8));
+        String hash = DigestUtils.md5DigestAsHex(Objects.requireNonNull(repoUrl.getBytes(StandardCharsets.UTF_8)));
         return gitCacheRoot().resolve(hash);
     }
 

@@ -18,6 +18,7 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
 import java.util.LinkedHashMap;
+import java.util.Objects;
 import java.util.List;
 import java.util.Map;
 
@@ -52,10 +53,10 @@ public class OpenAiCompatibleClient implements AiClient {
             String responseBody = restClientBuilder.build()
                     .post()
                     .uri(endpoint)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .accept(MediaType.APPLICATION_JSON)
+                    .contentType(Objects.requireNonNull(MediaType.APPLICATION_JSON))
+                    .accept(Objects.requireNonNull(MediaType.APPLICATION_JSON))
                     .header("Authorization", "Bearer " + aiModelProperties.getApiKey())
-                    .body(body)
+                    .body(Objects.requireNonNull(body))
                     .retrieve()
                     .body(String.class);
 
