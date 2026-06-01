@@ -5,11 +5,11 @@
  * - everything else -> wrapped as single-element array
  */
 export function normalizeArray(value?: string | null): string {
-  if (!value) return "[]";
+  if (!value) return '[]';
   try {
     const parsed = JSON.parse(value);
     if (Array.isArray(parsed)) return JSON.stringify(parsed, null, 2);
-    if (typeof parsed === "string") return JSON.stringify([parsed], null, 2);
+    if (typeof parsed === 'string') return JSON.stringify([parsed], null, 2);
     return JSON.stringify([JSON.stringify(parsed)], null, 2);
   } catch {
     return JSON.stringify([value.trim()], null, 2);
@@ -23,38 +23,41 @@ export function normalizeArray(value?: string | null): string {
  * P2 (低) -> 正常场景
  */
 export function getDefaultCaseTypeForRiskLevel(riskLevel?: string | null): string {
-  if (riskLevel === "P0") {
-    return "异常场景";
+  if (riskLevel === 'P0') {
+    return '异常场景';
   }
-  return "正常场景";
+  return '正常场景';
 }
 
 const CASE_TYPE_LABELS: Record<string, string> = {
-  NORMAL: "正常场景",
-  EXCEPTION: "异常场景",
-  BOUNDARY: "边界场景",
-  PERMISSION: "权限场景",
-  STATUS_FLOW: "状态流转场景",
-  API_VALIDATION: "接口校验场景"
+  NORMAL: '正常场景',
+  EXCEPTION: '异常场景',
+  BOUNDARY: '边界场景',
+  PERMISSION: '权限场景',
+  STATUS_FLOW: '状态流转场景',
+  API_VALIDATION: '接口校验场景',
 };
 
 export const CASE_TYPE_OPTIONS = Object.values(CASE_TYPE_LABELS).map((value) => ({
   value,
-  label: value
+  label: value,
 }));
 
 function normalizeCaseTypeKey(caseType: string): string {
-  return caseType.trim().replace(/[\s-]+/g, "_").toUpperCase();
+  return caseType
+    .trim()
+    .replace(/[\s-]+/g, '_')
+    .toUpperCase();
 }
 
 /**
  * Map English case type to Chinese display name.
  */
 export function formatCaseType(caseType?: string | null): string {
-  if (!caseType) return "-";
+  if (!caseType) return '-';
 
   const trimmed = caseType.trim();
-  if (!trimmed) return "-";
+  if (!trimmed) return '-';
 
   return CASE_TYPE_LABELS[normalizeCaseTypeKey(trimmed)] || trimmed;
 }
@@ -68,7 +71,9 @@ export function toEnglishCaseType(caseType?: string | null): string | undefined 
   const trimmed = caseType.trim();
   if (!trimmed) return undefined;
 
-  const chineseToEnglish = Object.fromEntries(Object.entries(CASE_TYPE_LABELS).map(([key, value]) => [value, key]));
+  const chineseToEnglish = Object.fromEntries(
+    Object.entries(CASE_TYPE_LABELS).map(([key, value]) => [value, key]),
+  );
   const normalized = normalizeCaseTypeKey(trimmed);
 
   return chineseToEnglish[trimmed] || (CASE_TYPE_LABELS[normalized] ? normalized : trimmed);
@@ -83,13 +88,13 @@ export function jsonArrayRule(label: string, { allowEmpty = true } = {}) {
   return {
     validator: (_: unknown, value: string) => {
       // Trim whitespace before parsing to handle stray newlines/spaces
-      const trimmed = value ? value.trim() : "";
+      const trimmed = value ? value.trim() : '';
       if (!trimmed) {
         return Promise.reject(new Error(`${label}必须是 JSON 数组`));
       }
       try {
         const parsed = JSON.parse(trimmed);
-        if (typeof parsed === "string" && parsed.trim()) {
+        if (typeof parsed === 'string' && parsed.trim()) {
           return Promise.resolve();
         }
         if (Array.isArray(parsed)) {
@@ -102,6 +107,6 @@ export function jsonArrayRule(label: string, { allowEmpty = true } = {}) {
       } catch {
         return Promise.reject(new Error(`${label}不是合法 JSON`));
       }
-    }
+    },
   };
 }

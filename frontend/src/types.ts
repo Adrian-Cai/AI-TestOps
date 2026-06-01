@@ -142,7 +142,7 @@ export interface OperationLog {
   id: number;
   time: string;
   action: string;
-  status: "success" | "error" | "info";
+  status: 'success' | 'error' | 'info';
   detail?: string;
 }
 

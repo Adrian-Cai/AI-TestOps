@@ -20,6 +20,12 @@
 - 前端开发服务器：`cd frontend && npm run dev`（端口 5173，API 代理到 8080）
 - 完整验证需同时运行后端测试和前端构建
 
+## 代码质量
+
+- 前端 Lint：`cd frontend && npm run lint`（ESLint + TypeScript + React Hooks 规则）
+- 前端格式化：Prettier 已配置（`frontend/.prettierrc`），编辑前端文件时自动格式化
+- 前端 Lint 修复：`cd frontend && npm run lint:fix`
+
 ## 项目架构
 
 - 后端：Spring Boot 3 + MyBatis-Plus + MariaDB，Java 17
