@@ -97,10 +97,11 @@ export const api = {
       body: JSON.stringify(input),
     });
   },
-  listDrafts(input: { documentId?: string; generationId?: string }) {
+  listDrafts(input: { documentId?: string; generationId?: string; reviewStatus?: string }) {
     const query = new URLSearchParams();
     if (input.documentId) query.set('documentId', input.documentId);
     if (input.generationId) query.set('generationId', input.generationId);
+    if (input.reviewStatus) query.set('reviewStatus', input.reviewStatus);
     const suffix = query.toString() ? `?${query}` : '';
     return requestJson<TestCaseDraftVO[]>(`/api/ai-testops/testcases/drafts${suffix}`);
   },

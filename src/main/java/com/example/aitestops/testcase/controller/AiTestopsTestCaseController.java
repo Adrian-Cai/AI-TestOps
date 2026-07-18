@@ -46,8 +46,9 @@ public class AiTestopsTestCaseController {
     @GetMapping("/drafts")
     @Operation(summary = "查询测试用例草稿列表")
     public ApiResponse<List<TestCaseDraftVO>> listDrafts(@RequestParam(required = false) String documentId,
-                                                         @RequestParam(required = false) String generationId) {
-        return ApiResponse.success(draftService.listDrafts(documentId, generationId));
+                                                         @RequestParam(required = false) String generationId,
+                                                         @RequestParam(required = false) String reviewStatus) {
+        return ApiResponse.success(draftService.listDrafts(documentId, generationId, reviewStatus));
     }
 
     @GetMapping("/drafts/{draftCaseId}")

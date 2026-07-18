@@ -19,7 +19,7 @@ public interface AiTestopsTestCaseDraftService extends IService<AiTestopsTestCas
 
     TestCaseGenerateVO generateDrafts(TestCaseGenerateRequest request);
 
-    List<TestCaseDraftVO> listDrafts(String documentId, String generationId);
+    List<TestCaseDraftVO> listDrafts(String documentId, String generationId, String reviewStatus);
 
     TestCaseDraftVO getDraft(String draftCaseId);
 

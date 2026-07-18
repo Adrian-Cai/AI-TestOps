@@ -218,7 +218,6 @@ function App() {
     generationRecord?.generationId;
   const passedValidations = validations.filter((item) => item.status === 'PASSED').length;
   const failedValidations = validations.filter((item) => item.status === 'FAILED').length;
-  const approvedDrafts = drafts.filter((item) => item.reviewStatus === 'APPROVED').length;
   const pendingDrafts = drafts.filter(
     (item) => !item.reviewStatus || item.reviewStatus === 'PENDING',
   ).length;
@@ -395,6 +394,7 @@ function App() {
       api.listDrafts({
         documentId,
         generationId: options?.documentOnly ? undefined : generationResult?.generationId,
+        reviewStatus: 'PENDING',
       }),
     );
     if (data) {
@@ -422,6 +422,12 @@ function App() {
     } catch (error) {
       console.error('refreshCases error:', error);
     }
+  };
+
+  const removeDraftsFromReviewList = (draftCaseIds: string[]) => {
+    const removedSet = new Set(draftCaseIds);
+    setDrafts((items) => items.filter((item) => !removedSet.has(item.draftCaseId)));
+    setSelectedDraftKeys((keys) => keys.filter((key) => !removedSet.has(String(key))));
   };
 
   const handleMenuClick: MenuProps['onClick'] = ({ key }) => {
@@ -578,16 +584,12 @@ function App() {
   };
 
   const approveDraft = async (draft: TestCaseDraftVO) => {
-    console.log('approveDraft starting:', draft.draftCaseId);
     const data = await runAction('approve-draft', '确认草稿', () =>
       api.approveDraft(draft.draftCaseId),
     );
-    console.log('approveDraft result:', data);
     if (data) {
-      console.log('approveDraft success, refreshing drafts and cases...');
-      await refreshDrafts();
+      removeDraftsFromReviewList([draft.draftCaseId]);
       await refreshCases();
-      console.log('refresh completed, cases count:', cases.length);
     }
   };
 
@@ -596,9 +598,7 @@ function App() {
       api.rejectDraft(draft.draftCaseId),
     );
     if (data) {
-      setDrafts((items) =>
-        items.map((item) => (item.draftCaseId === data.draftCaseId ? data : item)),
-      );
+      removeDraftsFromReviewList([data.draftCaseId]);
     }
   };
 
@@ -607,22 +607,19 @@ function App() {
       messageApi.warning('请先选择待确认草稿。');
       return;
     }
-    const approvedSet = new Set(
-      drafts.filter((d) => d.reviewStatus === 'APPROVED').map((d) => d.draftCaseId),
+    const pendingSet = new Set(
+      drafts
+        .filter((draft) => !draft.reviewStatus || draft.reviewStatus === 'PENDING')
+        .map((draft) => draft.draftCaseId),
     );
-    const pendingIds = selectedDraftKeys.filter((key) => !approvedSet.has(String(key))).map(String);
-    const skippedCount = selectedDraftKeys.length - pendingIds.length;
+    const pendingIds = selectedDraftKeys.filter((key) => pendingSet.has(String(key))).map(String);
     if (!pendingIds.length) {
-      messageApi.warning('所选草稿均已确认，无需重复操作。');
+      messageApi.warning('所选草稿没有待确认项。');
       return;
-    }
-    if (skippedCount > 0) {
-      messageApi.info(`已自动跳过 ${skippedCount} 条已确认草稿。`);
     }
     const data = await runAction('batch-approve', '批量确认', () => api.batchApprove(pendingIds));
     if (data) {
-      setSelectedDraftKeys([]);
-      await refreshDrafts();
+      removeDraftsFromReviewList(pendingIds);
       await refreshCases();
     }
   };
@@ -1310,10 +1307,16 @@ function App() {
         extra={
           <Space wrap>
             <Button icon={<ReloadOutlined />} onClick={() => refreshDrafts()}>
-              查询草稿
+              刷新待确认
             </Button>
-            <Button icon={<CheckCircleOutlined />} type="primary" onClick={batchApprove}>
-              批量确认
+            <Button
+              icon={<CheckCircleOutlined />}
+              type="primary"
+              loading={busy === 'batch-approve'}
+              disabled={!selectedDraftKeys.length || busy === 'batch-approve'}
+              onClick={batchApprove}
+            >
+              {selectedDraftKeys.length ? `批量确认 (${selectedDraftKeys.length})` : '批量确认'}
             </Button>
           </Space>
         }
@@ -1322,8 +1325,14 @@ function App() {
           rowKey="draftCaseId"
           columns={draftColumns}
           dataSource={drafts}
-          rowSelection={{ selectedRowKeys: selectedDraftKeys, onChange: setSelectedDraftKeys }}
-          locale={{ emptyText: <Empty description="暂无测试用例草稿，请先生成。" /> }}
+          rowSelection={{
+            selectedRowKeys: selectedDraftKeys,
+            onChange: setSelectedDraftKeys,
+            getCheckboxProps: (record) => ({
+              disabled: Boolean(record.reviewStatus && record.reviewStatus !== 'PENDING'),
+            }),
+          }}
+          locale={{ emptyText: <Empty description="暂无待确认测试用例草稿。" /> }}
           pagination={{ pageSize: 8 }}
           scroll={{ x: 980 }}
         />
@@ -1398,11 +1407,10 @@ function App() {
             status={pendingDrafts ? 'PENDING' : undefined}
           />
           <SummaryItem
-            label="已确认草稿"
-            value={`${approvedDrafts}`}
-            status={approvedDrafts ? 'APPROVED' : undefined}
+            label="已确认用例"
+            value={`${cases.length}`}
+            status={cases.length ? 'APPROVED' : undefined}
           />
-          <SummaryItem label="正式用例" value={`${cases.length}`} />
         </Space>
       </Card>
     );

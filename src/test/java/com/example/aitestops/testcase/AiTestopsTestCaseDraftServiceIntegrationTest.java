@@ -5,6 +5,7 @@ import com.example.aitestops.ai.service.AiTestopsRequirementExtractService;
 import com.example.aitestops.ai.service.AiTestopsValidationResultService;
 import com.example.aitestops.ai.vo.RequirementExtractVO;
 import com.example.aitestops.ai.vo.ValidationResultVO;
+import com.example.aitestops.common.enums.ReviewStatusEnum;
 import com.example.aitestops.common.enums.ValidationStatusEnum;
 import com.example.aitestops.common.exception.BusinessException;
 import com.example.aitestops.document.dto.TextDocumentCreateRequest;
@@ -12,6 +13,7 @@ import com.example.aitestops.document.service.AiTestopsDocumentService;
 import com.example.aitestops.document.vo.DocumentVO;
 import com.example.aitestops.review.service.AiTestopsReviewRecordService;
 import com.example.aitestops.review.vo.ReviewRecordVO;
+import com.example.aitestops.testcase.dto.TestCaseDraftBatchApproveRequest;
 import com.example.aitestops.testcase.dto.TestCaseDraftReviewRequest;
 import com.example.aitestops.testcase.dto.TestCaseDraftUpdateRequest;
 import com.example.aitestops.testcase.dto.TestCaseGenerateRequest;
@@ -72,7 +74,7 @@ class AiTestopsTestCaseDraftServiceIntegrationTest {
         TestCaseGenerateVO generated = testCaseDraftService.generateDrafts(generateRequest);
 
         List<ValidationResultVO> validations = validationResultService.listByGenerationId(generated.getGenerationId());
-        List<TestCaseDraftVO> drafts = testCaseDraftService.listDrafts(document.getDocumentId(), generated.getGenerationId());
+        List<TestCaseDraftVO> drafts = testCaseDraftService.listDrafts(document.getDocumentId(), generated.getGenerationId(), null);
 
         assertThat(generated.getGenerationId()).startsWith("GEN_");
         assertThat(generated.getDraftCount()).isEqualTo(1);
@@ -206,6 +208,80 @@ class AiTestopsTestCaseDraftServiceIntegrationTest {
         assertThat(approved.getStepsJson()).contains("step_no");
         assertThat(approved.getExpectedResultsJson())
                 .isEqualTo("[\"鐢宠鎻愪氦鎴愬姛锛岀郴缁熻繑鍥炵敵璇峰崟 ID\"]");
+    }
+
+    @Test
+    void listDraftsShouldFilterByReviewStatus() {
+        String documentId = "DOC_FILTER_001";
+        String generationId = "GEN_FILTER_001";
+        createManualDraft("DRAFT_FILTER_PENDING_001", "TC_FILTER_PENDING_001",
+                documentId, generationId, ReviewStatusEnum.PENDING.name());
+        createManualDraft("DRAFT_FILTER_APPROVED_001", "TC_FILTER_APPROVED_001",
+                documentId, generationId, ReviewStatusEnum.APPROVED.name());
+        createManualDraft("DRAFT_FILTER_REJECTED_001", "TC_FILTER_REJECTED_001",
+                documentId, generationId, ReviewStatusEnum.REJECTED.name());
+
+        List<TestCaseDraftVO> allDrafts = testCaseDraftService.listDrafts(documentId, generationId, null);
+        List<TestCaseDraftVO> pendingDrafts = testCaseDraftService.listDrafts(
+                documentId, generationId, ReviewStatusEnum.PENDING.name());
+
+        assertThat(allDrafts)
+                .extracting(TestCaseDraftVO::getDraftCaseId)
+                .containsExactlyInAnyOrder(
+                        "DRAFT_FILTER_PENDING_001",
+                        "DRAFT_FILTER_APPROVED_001",
+                        "DRAFT_FILTER_REJECTED_001");
+        assertThat(pendingDrafts)
+                .extracting(TestCaseDraftVO::getDraftCaseId)
+                .containsExactly("DRAFT_FILTER_PENDING_001");
+    }
+
+    @Test
+    void batchApproveShouldRemoveApprovedDraftsFromPendingQuery() {
+        String documentId = "DOC_BATCH_APPROVE_001";
+        String generationId = "GEN_BATCH_APPROVE_001";
+        createManualDraft("DRAFT_BATCH_APPROVE_001", "TC_BATCH_APPROVE_001",
+                documentId, generationId, ReviewStatusEnum.PENDING.name());
+        createManualDraft("DRAFT_BATCH_APPROVE_002", "TC_BATCH_APPROVE_002",
+                documentId, generationId, ReviewStatusEnum.PENDING.name());
+
+        TestCaseDraftBatchApproveRequest request = new TestCaseDraftBatchApproveRequest();
+        request.setDraftCaseIds(List.of("DRAFT_BATCH_APPROVE_001", "DRAFT_BATCH_APPROVE_002"));
+        request.setReviewer("qa");
+
+        List<TestCaseVO> approved = testCaseDraftService.batchApprove(request);
+        List<TestCaseDraftVO> pendingDrafts = testCaseDraftService.listDrafts(
+                documentId, generationId, ReviewStatusEnum.PENDING.name());
+        List<TestCaseVO> formalCases = testCaseService.listCases(documentId, null);
+
+        assertThat(approved).hasSize(2);
+        assertThat(pendingDrafts).isEmpty();
+        assertThat(formalCases)
+                .extracting(TestCaseVO::getSourceDraftCaseId)
+                .containsExactlyInAnyOrder("DRAFT_BATCH_APPROVE_001", "DRAFT_BATCH_APPROVE_002");
+    }
+
+    private void createManualDraft(String draftCaseId, String caseId,
+                                   String documentId, String generationId, String reviewStatus) {
+        AiTestopsTestCaseDraft draft = new AiTestopsTestCaseDraft();
+        draft.setDraftCaseId(draftCaseId);
+        draft.setCaseId(caseId);
+        draft.setGenerationId(generationId);
+        draft.setDocumentId(documentId);
+        draft.setTitle("手工草稿 " + draftCaseId);
+        draft.setPreconditionsJson("[]");
+        draft.setStepsJson("[{\"step_no\":1,\"action\":\"执行测试操作\"}]");
+        draft.setExpectedResultsJson("[\"测试结果符合预期\"]");
+        draft.setPriority("P1");
+        draft.setCaseType("NORMAL");
+        draft.setRiskLevel("P1");
+        draft.setRequirementRefsJson("[\"REQ_001\"]");
+        draft.setRiskTagsJson("[\"manual\"]");
+        draft.setReviewStatus(reviewStatus);
+        draft.setRawCaseJson("{}");
+        draft.setCreatedAt(LocalDateTime.now());
+        draft.setUpdatedAt(LocalDateTime.now());
+        testCaseDraftService.save(draft);
     }
 
     private TestCaseGenerateVO generateOneDraft() {

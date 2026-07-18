@@ -148,7 +148,7 @@ public class AiTestopsTestCaseDraftServiceImpl
     }
 
     @Override
-    public List<TestCaseDraftVO> listDrafts(String documentId, String generationId) {
+    public List<TestCaseDraftVO> listDrafts(String documentId, String generationId, String reviewStatus) {
         LambdaQueryWrapper<AiTestopsTestCaseDraft> wrapper = new LambdaQueryWrapper<AiTestopsTestCaseDraft>()
                 .orderByDesc(AiTestopsTestCaseDraft::getCreatedAt);
         if (StringUtils.hasText(documentId)) {
@@ -156,6 +156,9 @@ public class AiTestopsTestCaseDraftServiceImpl
         }
         if (StringUtils.hasText(generationId)) {
             wrapper.eq(AiTestopsTestCaseDraft::getGenerationId, generationId);
+        }
+        if (StringUtils.hasText(reviewStatus)) {
+            wrapper.eq(AiTestopsTestCaseDraft::getReviewStatus, reviewStatus);
         }
         return list(wrapper).stream().map(this::toVO).toList();
     }
