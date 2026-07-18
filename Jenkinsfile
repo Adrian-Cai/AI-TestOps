@@ -1,7 +1,8 @@
 
 pipeline {
-    // 部署任务必须在主节点（Jenkins Master）执行，不要跑到测试节点
-    agent { label 'built-in' }
+    // 部署任务在 120 服务器对应的 Jenkins Agent 上执行。
+    // 需要先在 Jenkins 节点管理中给 120 服务器配置 ai-testops-120 标签。
+    agent { label 'ai-testops-120' }
 
     environment {
         IMAGE_NAME  = "docker.cnb.cool/imacaiy/ai-testops"
@@ -16,6 +17,11 @@ pipeline {
             name: 'DEPLOY_ENV',
             choices: ['production'],
             description: '部署环境'
+        )
+        string(
+            name: 'ACCESS_HOST',
+            defaultValue: '',
+            description: '访问域名或服务器 IP；留空时尝试使用部署节点的第一个 IP'
         )
         string(
             name: 'IMAGE_TAG',
@@ -360,7 +366,14 @@ COMPOSE_EOF
                     script: "grep '^DOMAIN=' ${ENV_FILE} 2>/dev/null | cut -d'=' -f2- || echo ''",
                     returnStdout: true
                 ).trim()
-                def accessUrl = domain ? "http://\${domain}" : "http://\${SERVER_IP}:${host_port}"
+                def accessHost = params.ACCESS_HOST?.trim()
+                if (!accessHost) {
+                    accessHost = sh(
+                        script: "hostname -I 2>/dev/null | awk '{print \$1}' || hostname",
+                        returnStdout: true
+                    ).trim()
+                }
+                def accessUrl = domain ? "http://${domain}" : "http://${accessHost}:${host_port}"
 
                 echo ""
                 echo "========================================"
